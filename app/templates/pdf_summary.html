@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">PDF Monthly Summary</h1>
+<div class="card mb-4">
+  <form method="post" enctype="multipart/form-data" class="grid grid-cols-1 md:grid-cols-4 gap-3">
+    <div class="md:col-span-2">
+      <label class="text-sm text-slate-500">PDF File</label>
+      <input type="file" name="file" accept="application/pdf" class="input" required>
+    </div>
+    <div>
+      <label class="text-sm text-slate-500">Password (if any)</label>
+      <input type="password" name="password" class="input" placeholder="Optional if not locked">
+    </div>
+    <div class="flex items-end">
+      <button class="btn">Upload & Summarize</button>
+    </div>
+  </form>
+</div>
+
+{% if result %}
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+  <div class="p-4 rounded bg-teal-50 dark:bg-slate-700/50">
+    <div class="text-sm text-slate-500">Income</div>
+    <div class="text-3xl font-bold">₹ {{ '%.2f'|format(result.income_total) if result.income_total is not none else result['income_total'] }}</div>
+    <div class="text-xs text-slate-500">Entries: {{ result.income_entries }}</div>
+  </div>
+  <div class="p-4 rounded bg-red-50 dark:bg-slate-700/50">
+    <div class="text-sm text-slate-500">Expenses</div>
+    <div class="text-3xl font-bold">₹ {{ '%.2f'|format(result.expense_total) if result.expense_total is not none else result['expense_total'] }}</div>
+    <div class="text-xs text-slate-500">Entries: {{ result.expense_entries }}</div>
+  </div>
+  <div class="p-4 rounded bg-blue-50 dark:bg-slate-700/50">
+    <div class="text-sm text-slate-500">Net</div>
+    <div class="text-3xl font-bold">₹ {{ '%.2f'|format(result.net) if result.net is not none else result['net'] }}</div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

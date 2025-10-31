@@ -8,6 +8,7 @@ from .routes.buildings import buildings_bp
 from .routes.tenants import tenants_bp
 from .routes.lodge import lodge_bp
 from .routes.summaries import summaries_bp
+from .routes.pdf_summary import pdf_bp
 from .routes.auth import auth_bp
 from config import config_by_name
 
@@ -34,6 +35,7 @@ def create_app(config_name: str = "default"):
     app.register_blueprint(tenants_bp, url_prefix="/tenants")
     app.register_blueprint(lodge_bp, url_prefix="/lodge")
     app.register_blueprint(summaries_bp)
+    app.register_blueprint(pdf_bp)
 
     with app.app_context():
         db.create_all()
