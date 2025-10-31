@@ -1,0 +1,69 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="flex items-center justify-between mb-4">
+  <h1 class="text-2xl font-bold">Monthly Summaries</h1>
+  <a href="{{ url_for('summaries.add_summary') }}" class="btn">Add Summary</a>
+</div>
+
+<form method="get" class="mb-4 flex gap-2 items-center">
+  <label class="text-sm text-slate-500">Year</label>
+  <select name="year" class="input w-32" onchange="this.form.submit()">
+    {% for y in years %}
+    <option value="{{ y }}" {% if y==selected_year %}selected{% endif %}>{{ y }}</option>
+    {% endfor %}
+  </select>
+</form>
+
+<div class="card mb-4">
+  <div class="text-lg font-semibold mb-2">Totals for {{ selected_year }}</div>
+  <canvas id="totalsChart"></canvas>
+</div>
+
+<div class="card">
+  <table class="table">
+    <thead>
+      <tr>
+        <th class="th">Month</th>
+        <th class="th">Chakravarthy</th>
+        <th class="th">Monthly Tenants</th>
+        <th class="th">Relax Inn</th>
+        <th class="th">Misc</th>
+        <th class="th">Total</th>
+        <th class="th">Period</th>
+        <th class="th">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td class="td font-semibold">{{ "%02d"|format(r.month) }}</td>
+        <td class="td">₹ {{ '%.2f'|format(r.lodge_chakravarthy or 0) }}</td>
+        <td class="td">₹ {{ '%.2f'|format(r.monthly_rent_building or 0) }}</td>
+        <td class="td">₹ {{ '%.2f'|format(r.lodge_relax_inn or 0) }}</td>
+        <td class="td">₹ {{ '%.2f'|format(r.misc_income or 0) }}</td>
+        <td class="td font-semibold">₹ {{ '%.2f'|format(r.total_income or 0) }}</td>
+        <td class="td text-sm">{{ r.period_start }} — {{ r.period_end }}</td>
+        <td class="td space-x-2">
+          <a class="btn-outline" href="{{ url_for('summaries.edit_summary', item_id=r.id) }}">Edit</a>
+          <form method="post" action="{{ url_for('summaries.delete_summary', item_id=r.id) }}" style="display:inline" onsubmit="return confirm('Delete summary?');">
+            <button class="btn">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<script>
+const ctx = document.getElementById('totalsChart');
+new Chart(ctx, {
+  type: 'bar',
+  data: {
+    labels: {{ chart_labels|tojson }},
+    datasets: [{ label: 'Total', data: {{ chart_values|tojson }}, backgroundColor: '#2dd4bf' }]
+  },
+  options: { responsive: true, plugins: { legend: { display: false } } }
+});
+</script>
+{% endblock %}
