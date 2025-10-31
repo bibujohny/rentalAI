@@ -1,6 +1,7 @@
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
+from flask_migrate import Migrate
 from .models import db, User, seed_demo_data
 from .routes.dashboard import dashboard_bp
 from .routes.buildings import buildings_bp
@@ -16,6 +17,7 @@ def create_app(config_name: str = "default"):
     app.config.from_object(config_by_name[config_name])
 
     db.init_app(app)
+    Migrate(app, db)
 
     login_manager = LoginManager()
     login_manager.login_view = "auth.login"
@@ -34,6 +36,8 @@ def create_app(config_name: str = "default"):
 
     with app.app_context():
         db.create_all()
-        seed_demo_data()
+        # Allow tests and certain deploy contexts to skip seeding
+        if not app.config.get('SKIP_SEED', False):
+            seed_demo_data()
 
     return app
