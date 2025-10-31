@@ -23,17 +23,6 @@
     .td { border-bottom: 1px solid #e2e8f0; padding: 0.5rem; }
     .dark .td { border-color: #334155; }
   </style>
-  <script>
-    function toggleTheme(){
-      const html = document.documentElement;
-      html.classList.toggle('dark');
-      localStorage.setItem('theme', html.classList.contains('dark') ? 'dark' : 'light');
-    }
-    document.addEventListener('DOMContentLoaded', () => {
-      const theme = localStorage.getItem('theme') || 'light';
-      if(theme === 'dark') document.documentElement.classList.add('dark');
-    });
-  </script>
 </head>
 <body class="h-full bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-slate-100">
 <div class="min-h-screen flex">
@@ -52,7 +41,6 @@
       <a href="{{ url_for('lodge.list_guests') }}" class="block hover:text-teal-600">🛏️ Lodge</a>
       <a href="{{ url_for('auth.logout') }}" class="block hover:text-teal-600">🚪 Logout</a>
     </nav>
-    <button class="btn w-full" onclick="toggleTheme()">Toggle Dark/Light</button>
   </aside>
   <main class="flex-1 p-6">
     {% with messages = get_flashed_messages(with_categories=true) %}
