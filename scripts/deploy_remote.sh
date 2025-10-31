@@ -8,6 +8,8 @@ SYSTEMCTL="$(command -v systemctl || echo /usr/bin/systemctl)"
 LOG_DIR="$APP_DIR/logs"
 GUNICORN_CMD="$APP_DIR/.venv/bin/gunicorn -w 3 -k gthread --threads 4 -b 127.0.0.1:8000 wsgi:app"
 FALLBACK_PID_FILE="$APP_DIR/.gunicorn.pid"
+# Domain to verify via Nginx (can be overridden by PUBLIC_DOMAIN in .env)
+DOMAIN="rentalai.in"
 
 mkdir -p "$LOG_DIR"
 
@@ -30,6 +32,9 @@ if [[ ! -d .venv ]]; then
   python3 -m venv .venv
 fi
 source .venv/bin/activate
+# Load .env if present to get PUBLIC_DOMAIN override
+if [[ -f .env ]]; then set -a; source .env; set +a; fi
+if [[ -n "${PUBLIC_DOMAIN:-}" ]]; then DOMAIN="$PUBLIC_DOMAIN"; fi
 pip install --upgrade pip >/dev/null
 pip install -r requirements.txt >/dev/null
 
@@ -79,13 +84,45 @@ SLEEP=2
 for i in $(seq 1 $ATTEMPTS); do
   if curl -fsS -I http://127.0.0.1:8000/ >/dev/null; then
     echo "[deploy] OK"
-    exit 0
+    break
   fi
   echo "[deploy] Attempt $i/$ATTEMPTS failed; retrying in ${SLEEP}s..."
   sleep $SLEEP
 done
 
-echo "[deploy] ERROR: App did not respond on 127.0.0.1:8000 after $((ATTEMPTS*SLEEP))s"
-echo "[deploy] Last 100 lines of gunicorn.log (if any):"
-tail -n 100 "$LOG_DIR/gunicorn.log" || true
-exit 1
+# Nginx domain verification (if nginx is installed)
+if command -v nginx >/dev/null 2>&1; then
+  echo "[deploy] Verifying Nginx config and domain: $DOMAIN"
+  set +e
+  sudo -n nginx -t >/dev/null 2>&1
+  NGRC=$?
+  set -e
+  if [[ $NGRC -ne 0 ]]; then
+    echo "[deploy] nginx -t failed; printing config errors:"
+    sudo nginx -t || true
+    echo "[deploy] Attempting to continue, but domain check may fail."
+  else
+    sudo -n "$SYSTEMCTL" reload nginx 2>/dev/null || true
+  fi
+  if ! curl -fsS -I -H "Host: $DOMAIN" http://127.0.0.1/ >/dev/null; then
+    echo "[deploy] ERROR: Nginx did not serve domain $DOMAIN on localhost. Diagnostics:"
+    echo "[deploy] Enabled sites:"
+    ls -l /etc/nginx/sites-enabled || true
+    echo "[deploy] server_name entries:"
+    sudo grep -R "server_name" -n /etc/nginx/sites-enabled || true
+    echo "[deploy] Suggest ensuring: server_name $DOMAIN; and listen 80; (and listen [::]:80; if IPv6)."
+    exit 1
+  else
+    echo "[deploy] Nginx domain $DOMAIN OK"
+  fi
+fi
+
+# Final confirmation
+curl -fsS -I http://127.0.0.1:8000/ >/dev/null || {
+  echo "[deploy] ERROR: App not responding after Nginx checks."; 
+  echo "[deploy] Last 100 lines of gunicorn.log (if any):"; 
+  tail -n 100 "$LOG_DIR/gunicorn.log" || true; 
+  exit 1; 
+}
+
+echo "[deploy] Deployment completed successfully."
