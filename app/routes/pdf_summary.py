@@ -64,6 +64,24 @@ def summary():
             else:
                 result = summarize_month(text)
                 current_app.logger.info(f"PDF summary result={result}")
+                # Fallback: if heuristic found nothing, try Axis transaction parser to compute totals
+                try:
+                    if (not result) or ((result.get('income_entries', 0) == 0) and (result.get('expense_entries', 0) == 0)):
+                        rows = parse_axis_pdf(path, password=password)
+                        if rows:
+                            income_total = round(sum((r.get('credit') or 0.0) for r in rows), 2)
+                            expense_total = round(sum((r.get('debit') or 0.0) for r in rows), 2)
+                            result = {
+                                'income_total': income_total,
+                                'expense_total': expense_total,
+                                'net': round(income_total - expense_total, 2),
+                                'income_entries': sum(1 for r in rows if r.get('credit') not in (None, 0.0)),
+                                'expense_entries': sum(1 for r in rows if r.get('debit') not in (None, 0.0)),
+                            }
+                            flash('Used transaction table fallback to compute totals.', 'info')
+                            current_app.logger.info(f"PDF axis-fallback totals={result} rows={len(rows)}")
+                except Exception:
+                    current_app.logger.exception("Axis fallback failed")
         except Exception as e:
             current_app.logger.exception("PDF processing failed")
             flash(f'Error processing PDF: {e}', 'danger')
