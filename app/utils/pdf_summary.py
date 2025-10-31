@@ -1,5 +1,6 @@
 import re
 from typing import Tuple, Dict
+from .ocr import ocr_pdf_to_text
 
 try:
     import pdfplumber
@@ -44,6 +45,9 @@ def extract_text_from_pdf(path: str, password: str | None = None) -> str:
                     text += page.extract_text() or "\n"
         except Exception:
             pass
+    if not text:
+        # Attempt OCR fallback for scanned PDFs
+        text = ocr_pdf_to_text(path)
     return text
 
 
