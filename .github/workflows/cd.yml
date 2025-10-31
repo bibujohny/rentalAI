@@ -27,6 +27,7 @@ jobs:
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
+          port: ${{ secrets.DEPLOY_PORT }}
           key: ${{ secrets.DEPLOY_KEY }}
           script_stop: true
           script: |
@@ -54,3 +55,7 @@ with app.app_context():
 print('Applied migrations (if any).')
 PY
             sudo systemctl restart rentalai
+            # Smoke check (Gunicorn direct)
+            curl -fsS -I http://127.0.0.1:8000/ >/dev/null || (journalctl -u rentalai -n 100 --no-pager; exit 1)
+            # Optional: If Nginx is fronting, also verify HTTP 200/302
+            if command -v nginx >/dev/null 2>&1; then curl -fsS -I http://localhost/ >/dev/null || true; fi
