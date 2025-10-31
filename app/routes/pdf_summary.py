@@ -79,8 +79,9 @@ def summary():
 @pdf_bp.route('/axis', methods=['GET', 'POST'])
 @login_required
 def axis_to_json():
-    """Upload an Axis Bank statement PDF and return structured JSON of transactions."""
+    """Upload an Axis Bank statement PDF and return structured table of transactions with totals."""
     json_rows = None
+    totals = None
     if request.method == 'POST':
         f = request.files.get('file')
         password = request.form.get('password') or (current_app.config.get('PDF_DEFAULT_PASSWORD') or None)
@@ -110,7 +111,16 @@ def axis_to_json():
             rows = parse_axis_pdf(path, password=password)
             current_app.logger.info(f"Axis parsed {len(rows)} rows")
             json_rows = rows
-            if not rows:
+            if rows:
+                income_total = round(sum((r.get('credit') or 0.0) for r in rows), 2)
+                expense_total = round(sum((r.get('debit') or 0.0) for r in rows), 2)
+                totals = {
+                    'income_total': income_total,
+                    'expense_total': expense_total,
+                    'net': round(income_total - expense_total, 2),
+                    'count': len(rows),
+                }
+            else:
                 flash('No transactions found. Check that this is an Axis Bank statement with a visible transactions table.', 'warning')
         except Exception as e:
             current_app.logger.exception("Axis PDF parsing failed")
@@ -120,4 +130,4 @@ def axis_to_json():
                 os.remove(path)
             except Exception:
                 pass
-    return render_template('pdf_axis.html', json_rows=json_rows)
+    return render_template('pdf_axis.html', json_rows=json_rows, totals=totals)

@@ -18,9 +18,43 @@
 </div>
 
 {% if json_rows is not none %}
-<div class="card">
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+  <div class="p-4 rounded bg-teal-50 dark:bg-slate-700/50">
+    <div class="text-sm text-slate-500">Total Income (Cr)</div>
+    <div class="text-3xl font-bold">₹ {{ '%.2f'|format(totals.income_total if totals else 0) }}</div>
+  </div>
+  <div class="p-4 rounded bg-red-50 dark:bg-slate-700/50">
+    <div class="text-sm text-slate-500">Total Expenses (Dr)</div>
+    <div class="text-3xl font-bold">₹ {{ '%.2f'|format(totals.expense_total if totals else 0) }}</div>
+  </div>
+  <div class="p-4 rounded bg-blue-50 dark:bg-slate-700/50">
+    <div class="text-sm text-slate-500">Net</div>
+    <div class="text-3xl font-bold">₹ {{ '%.2f'|format(totals.net if totals else 0) }}</div>
+  </div>
+</div>
+
+<div class="card overflow-auto">
   <div class="text-sm text-slate-500 mb-2">Extracted {{ json_rows|length }} transactions</div>
-  <pre class="text-xs overflow-auto bg-slate-900 text-slate-100 p-3 rounded">{{ json_rows|tojson(indent=2) }}</pre>
+  <table class="table">
+    <thead>
+      <tr>
+        <th class="th">Date</th>
+        <th class="th">Particulars</th>
+        <th class="th text-right">Debit</th>
+        <th class="th text-right">Credit</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in json_rows %}
+      <tr>
+        <td class="td whitespace-nowrap">{{ r.date if r.date is defined else r['date'] }}</td>
+        <td class="td">{{ r.particulars if r.particulars is defined else r['particulars'] }}</td>
+        <td class="td text-right">{% if r.debit is defined and r.debit is not none %}₹ {{ '%.2f'|format(r.debit) }}{% elif r['debit'] is not none %}₹ {{ '%.2f'|format(r['debit']) }}{% else %}-{% endif %}</td>
+        <td class="td text-right">{% if r.credit is defined and r.credit is not none %}₹ {{ '%.2f'|format(r.credit) }}{% elif r['credit'] is not none %}₹ {{ '%.2f'|format(r['credit']) }}{% else %}-{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
 </div>
 {% endif %}
 {% endblock %}
