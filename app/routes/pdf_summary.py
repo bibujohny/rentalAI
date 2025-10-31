@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, flash
+from flask import Blueprint, render_template, request, flash, current_app
 from flask_login import login_required
 import os
 from werkzeug.utils import secure_filename
@@ -22,7 +22,7 @@ def summary():
     result = None
     if request.method == 'POST':
         f = request.files.get('file')
-        password = request.form.get('password') or None
+        password = request.form.get('password') or (current_app.config.get('PDF_DEFAULT_PASSWORD') or None)
         if not f or f.filename == '':
             flash('Please choose a PDF file.', 'warning')
             return render_template('pdf_summary.html', result=None)

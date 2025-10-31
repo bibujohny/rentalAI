@@ -8,6 +8,9 @@ class Config:
     # External APIs
     OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 
+    # PDF defaults (if your monthly PDFs share a password)
+    PDF_DEFAULT_PASSWORD = os.environ.get("PDF_DEFAULT_PASSWORD", "")
+
 class DevConfig(Config):
     DEBUG = True
 
