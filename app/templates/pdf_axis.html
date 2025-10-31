@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">Axis Bank Statement → JSON</h1>
+<div class="card mb-4">
+  <form method="post" enctype="multipart/form-data" class="grid grid-cols-1 md:grid-cols-4 gap-3">
+    <div class="md:col-span-2">
+      <label class="text-sm text-slate-500">PDF File</label>
+      <input type="file" name="file" accept="application/pdf" class="input" required>
+    </div>
+    <div>
+      <label class="text-sm text-slate-500">Password (optional)</label>
+      <input type="password" name="password" class="input" placeholder="Leave blank to use default">
+    </div>
+    <div class="flex items-end">
+      <button class="btn">Upload & Extract</button>
+    </div>
+  </form>
+</div>
+
+{% if json_rows is not none %}
+<div class="card">
+  <div class="text-sm text-slate-500 mb-2">Extracted {{ json_rows|length }} transactions</div>
+  <pre class="text-xs overflow-auto bg-slate-900 text-slate-100 p-3 rounded">{{ json_rows|tojson(indent=2) }}</pre>
+</div>
+{% endif %}
+{% endblock %}

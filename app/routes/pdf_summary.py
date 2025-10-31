@@ -3,6 +3,7 @@ from flask_login import login_required
 import os, uuid
 from werkzeug.utils import secure_filename
 from ..utils.pdf_summary import extract_text_from_pdf, summarize_month
+from ..utils.axis_bank import parse_axis_pdf
 
 pdf_bp = Blueprint('pdf', __name__, url_prefix='/pdf')
 
@@ -73,3 +74,50 @@ def summary():
                 pass
 
     return render_template('pdf_summary.html', result=result)
+
+
+@pdf_bp.route('/axis', methods=['GET', 'POST'])
+@login_required
+def axis_to_json():
+    """Upload an Axis Bank statement PDF and return structured JSON of transactions."""
+    json_rows = None
+    if request.method == 'POST':
+        f = request.files.get('file')
+        password = request.form.get('password') or (current_app.config.get('PDF_DEFAULT_PASSWORD') or None)
+        if not f or f.filename == '':
+            flash('Please choose a PDF file.', 'warning')
+            return render_template('pdf_axis.html', json_rows=None)
+        if not allowed_file(f.filename):
+            flash('Only PDF files are allowed.', 'warning')
+            return render_template('pdf_axis.html', json_rows=None)
+        f.seek(0, os.SEEK_END)
+        size_mb = f.tell() / (1024 * 1024)
+        f.seek(0)
+        if size_mb > MAX_SIZE_MB:
+            flash(f'File too large: {size_mb:.1f} MB (max {MAX_SIZE_MB} MB).', 'warning')
+            return render_template('pdf_axis.html', json_rows=None)
+        try:
+            updir = upload_dir()
+            unique_name = f"{uuid.uuid4().hex}_{secure_filename(f.filename)}"
+            path = os.path.join(updir, unique_name)
+            f.save(path)
+        except Exception as e:
+            current_app.logger.exception("Upload save failed (axis)")
+            flash(f'Upload failed: {e}', 'danger')
+            return render_template('pdf_axis.html', json_rows=None)
+        try:
+            current_app.logger.info(f"Axis parse started file={path}, password_used={bool(password)}")
+            rows = parse_axis_pdf(path, password=password)
+            current_app.logger.info(f"Axis parsed {len(rows)} rows")
+            json_rows = rows
+            if not rows:
+                flash('No transactions found. Check that this is an Axis Bank statement with a visible transactions table.', 'warning')
+        except Exception as e:
+            current_app.logger.exception("Axis PDF parsing failed")
+            flash(f'Error parsing Axis statement: {e}', 'danger')
+        finally:
+            try:
+                os.remove(path)
+            except Exception:
+                pass
+    return render_template('pdf_axis.html', json_rows=json_rows)
