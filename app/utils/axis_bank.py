@@ -57,51 +57,102 @@ def _clean_particulars(cell: str | None) -> str:
 
 def parse_axis_statement_from_tables(path: str, password: Optional[str] = None) -> List[Dict]:
     """Use pdfplumber to extract tables and parse Axis Bank transactions.
-    Expected headers often include: 'Tran Date', 'Particulars', 'Chq No', 'Init. Br', 'Debit', 'Credit', 'Balance'
-    We'll map debit/credit from headers that contain 'Debit'/'Withdrawal' and 'Credit'/'Deposit'.
+    Works across pages that may omit headers after page 1 by carrying forward the last-known column indexes.
     """
     if pdfplumber is None:
         return []
     out: List[Dict] = []
+    # Persist indices across tables/pages if headers are missing
+    idx_date: Optional[int] = None
+    idx_part: Optional[int] = None
+    idx_debit: Optional[int] = None
+    idx_credit: Optional[int] = None
+    last_row: Optional[Dict] = None
+
     try:
         with pdfplumber.open(path, password=password) as pdf:
             for page in pdf.pages:
                 tables = page.extract_tables() or []
                 for tbl in tables:
-                    if not tbl or len(tbl) < 2:
+                    if not tbl or len(tbl) < 1:
                         continue
-                    # Find header row: look for a row containing 'Tran Date' and 'Particulars'
+                    # Try to locate a header row in first few lines
                     header_idx = None
-                    for i, row in enumerate(tbl[:3]):  # first few rows
+                    for i, row in enumerate(tbl[:5]):
                         row_l = [str(c).strip().lower() if c is not None else '' for c in row]
                         if any('tran' in x and 'date' in x for x in row_l) and any('particular' in x for x in row_l):
                             header_idx = i
                             break
-                    if header_idx is None:
-                        continue
-                    headers = [str(c).strip() if c is not None else '' for c in tbl[header_idx]]
-                    # Column indexes
-                    idx_date = next((i for i,h in enumerate(headers) if 'Tran' in h or 'Date' in h), None)
-                    idx_part = next((i for i,h in enumerate(headers) if 'Particular' in h), None)
-                    idx_debit = next((i for i,h in enumerate(headers) if 'Debit' in h or 'Withdrawal' in h), None)
-                    idx_credit = next((i for i,h in enumerate(headers) if 'Credit' in h or 'Deposit' in h), None)
-                    # Iterate rows after header
-                    for row in tbl[header_idx+1:]:
+                    if header_idx is not None:
+                        headers = [str(c).strip() if c is not None else '' for c in tbl[header_idx]]
+                        headers_l = [h.lower() for h in headers]
+                        def find_idx(cands: list[str]) -> Optional[int]:
+                            for cand in cands:
+                                for i,h in enumerate(headers_l):
+                                    if cand in h:
+                                        return i
+                            return None
+                        idx_date = find_idx(['tran date', 'transaction date', 'date'])
+                        idx_part = find_idx(['particular', 'description'])
+                        idx_debit = find_idx(['debit', 'withdrawal', '(dr)'])
+                        idx_credit = find_idx(['credit', 'deposit', '(cr)'])
+                        data_rows = tbl[header_idx+1:]
+                    else:
+                        # No header found on this table; if we have previous indexes, treat all rows as data
+                        if idx_date is None or idx_part is None:
+                            # Can't parse without at least date and particulars
+                            continue
+                        data_rows = tbl
+
+                    for row in data_rows:
                         cells = [c if c is not None else '' for c in row]
-                        # skip header repeats or blank
                         if not any(str(x).strip() for x in cells):
                             continue
                         raw_date = cells[idx_date] if idx_date is not None and idx_date < len(cells) else ''
                         raw_part = cells[idx_part] if idx_part is not None and idx_part < len(cells) else ''
-                        # Skip opening balance or header repeats
-                        if str(raw_part).strip().lower().startswith('opening balance'):
+                        d_iso = _parse_date(str(raw_date)) if raw_date else None
+
+                        # Continuation lines (no date) -> append to previous row
+                        if not d_iso and last_row and str(raw_part).strip():
+                            cont_text = ' '.join(str(c).strip() for c in cells if str(c).strip())
+                            # Try to update debit/credit from columns if present
+                            if idx_debit is not None and idx_debit < len(cells):
+                                deb = _parse_amount(cells[idx_debit])
+                                if deb is not None:
+                                    last_row['debit'] = deb
+                            if idx_credit is not None and idx_credit < len(cells):
+                                cr = _parse_amount(cells[idx_credit])
+                                if cr is not None:
+                                    last_row['credit'] = cr
+                            # Also scan particulars text for Cr/Dr tokens
+                            lower = cont_text.lower()
+                            if (' cr' in lower or 'credit' in lower) and (last_row.get('credit') is None):
+                                last_row['credit'] = _parse_amount(cont_text)
+                            if (' dr' in lower or 'debit' in lower) and (last_row.get('debit') is None):
+                                last_row['debit'] = _parse_amount(cont_text)
+                            last_row['particulars'] = (last_row.get('particulars','') + ' ' + _clean_particulars(raw_part)).strip()
                             continue
-                        d_iso = _parse_date(str(raw_date))
+
                         if not d_iso:
-                            # Not a transaction row
+                            # Can't parse this line
                             continue
+
+                        # Skip opening balance
+                        if str(raw_part).strip().lower().startswith('opening balance'):
+                            last_row = None
+                            continue
+
                         debit = _parse_amount(cells[idx_debit]) if idx_debit is not None and idx_debit < len(cells) else None
                         credit = _parse_amount(cells[idx_credit]) if idx_credit is not None and idx_credit < len(cells) else None
+
+                        # Fallback: amounts embedded in particulars
+                        if (debit is None and credit is None) and raw_part:
+                            lower = str(raw_part).lower()
+                            if ' cr' in lower or 'credit' in lower:
+                                credit = _parse_amount(raw_part)
+                            if ' dr' in lower or 'debit' in lower and credit is None:
+                                debit = _parse_amount(raw_part)
+
                         item = {
                             'date': d_iso,
                             'particulars': _clean_particulars(raw_part),
@@ -109,6 +160,7 @@ def parse_axis_statement_from_tables(path: str, password: Optional[str] = None) 
                             'credit': credit,
                         }
                         out.append(item)
+                        last_row = item
     except Exception:
         return out
     return out
