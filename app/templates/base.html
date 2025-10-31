@@ -24,14 +24,27 @@
     .dark .td { border-color: #334155; }
   </style>
   <script>
+    function setChartTheme() {
+      const isDark = document.documentElement.classList.contains('dark');
+      const text = isDark ? '#e5e7eb' : '#0f172a';
+      const grid = isDark ? 'rgba(148,163,184,0.2)' : 'rgba(51,65,85,0.2)';
+      if (window.Chart) {
+        Chart.defaults.color = text;
+        Chart.defaults.borderColor = grid;
+        Chart.defaults.plugins.legend.labels.color = text;
+        Chart.defaults.scales = Chart.defaults.scales || {};
+      }
+    }
     function toggleTheme(){
       const html = document.documentElement;
       html.classList.toggle('dark');
       localStorage.setItem('theme', html.classList.contains('dark') ? 'dark' : 'light');
+      setTimeout(() => { location.reload(); }, 50);
     }
     document.addEventListener('DOMContentLoaded', () => {
       const theme = localStorage.getItem('theme') || 'light';
       if(theme === 'dark') document.documentElement.classList.add('dark');
+      setChartTheme();
     });
   </script>
 </head>

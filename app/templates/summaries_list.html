@@ -16,7 +16,7 @@
 
 <div class="card mb-4">
   <div class="text-lg font-semibold mb-2">Totals for {{ selected_year }}</div>
-  <canvas id="totalsChart"></canvas>
+  <canvas id="totalsChart" height="120"></canvas>
 </div>
 
 <div class="card">
@@ -61,9 +61,16 @@ new Chart(ctx, {
   type: 'bar',
   data: {
     labels: {{ chart_labels|tojson }},
-    datasets: [{ label: 'Total', data: {{ chart_values|tojson }}, backgroundColor: '#2dd4bf' }]
+    datasets: [{ label: 'Total', data: {{ chart_values|tojson }}, backgroundColor: '#0ea5a4' }]
   },
-  options: { responsive: true, plugins: { legend: { display: false } } }
+  options: {
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: {
+      y: { ticks: { color: Chart.defaults.color }, grid: { color: Chart.defaults.borderColor } },
+      x: { ticks: { color: Chart.defaults.color }, grid: { color: Chart.defaults.borderColor } }
+    }
+  }
 });
 </script>
 {% endblock %}
