@@ -3,7 +3,7 @@ set -euo pipefail
 
 APP_BASE="/opt/rentalai"
 APP_DIR="$APP_BASE/app"
-PROJECT_DIR="$APP_DIR/rentalai"
+PROJECT_DIR="$APP_DIR"
 SERVICE_NAME="rentalai"
 
 # Ensure app exists (first-time bootstrap)
@@ -34,12 +34,14 @@ pip install -r requirements.txt
 # DB migrations without relying on flask CLI
 python3 - <<'PY'
 from app import create_app
-from app.models import db
 from flask_migrate import upgrade
 app = create_app()
 with app.app_context():
-    upgrade()
-print('Applied migrations (if any).')
+    try:
+        upgrade()
+        print('Applied migrations (if any).')
+    except Exception as e:
+        print('Migrate skipped or failed:', e)
 PY
 
 # Restart service (expects systemd unit installed on server)

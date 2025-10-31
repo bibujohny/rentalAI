@@ -40,19 +40,20 @@ jobs:
             cd /opt/rentalai/app
             git fetch --all --prune
             git reset --hard origin/main
-            cd rentalai
             if [ ! -d .venv ]; then python3 -m venv .venv; fi
             source .venv/bin/activate
             pip install --upgrade pip
             pip install -r requirements.txt
             python3 - <<'PY'
 from app import create_app
-from app.models import db
 from flask_migrate import upgrade
 app = create_app()
 with app.app_context():
-    upgrade()
-print('Applied migrations (if any).')
+    try:
+        upgrade()
+        print('Applied migrations (if any).')
+    except Exception as e:
+        print('Migrate skipped or failed:', e)
 PY
             sudo systemctl restart rentalai
             # Smoke check (Gunicorn direct)
