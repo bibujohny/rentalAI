@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="flex items-center justify-between mb-4">
+  <h1 class="text-2xl font-bold">Tenants</h1>
+</div>
+
+<div class="card mb-4">
+  <form method="post" action="{{ url_for('tenants.add_tenant') }}" class="grid grid-cols-1 md:grid-cols-8 gap-2">
+    <input name="name" placeholder="Name" class="input" required>
+    <input name="rent_amount" placeholder="Rent Amount" type="number" step="0.01" class="input">
+    <input name="start_date" type="date" class="input">
+    <input name="end_date" type="date" class="input">
+    <input name="consumer_number" placeholder="Consumer Number" class="input">
+    <input name="deposit_amount" placeholder="Deposit Amount" type="number" step="0.01" class="input">
+    <select name="building_id" class="input">
+      {% for b in buildings %}<option value="{{ b.id }}">{{ b.name }}</option>{% endfor %}
+    </select>
+    <button class="btn">Add</button>
+  </form>
+</div>
+
+<div class="card">
+  <table class="table">
+    <thead>
+      <tr>
+        <th class="th">Name</th><th class="th">Rent</th><th class="th">Start</th><th class="th">End</th>
+        <th class="th">Consumer #</th><th class="th">Deposit</th><th class="th">Building</th><th class="th">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in tenants %}
+      <tr>
+        <td class="td">{{ t.name }}</td>
+        <td class="td">₹ {{ '%.2f'|format(t.rent_amount) }}</td>
+        <td class="td">{{ t.start_date }}</td>
+        <td class="td">{{ t.end_date or '-' }}</td>
+        <td class="td">{{ t.consumer_number or '-' }}</td>
+        <td class="td">₹ {{ '%.2f'|format(t.deposit_amount) }}</td>
+        <td class="td">{{ t.building.name }}</td>
+        <td class="td">
+          <details>
+            <summary class="cursor-pointer text-teal-600">Edit</summary>
+            <form method="post" action="{{ url_for('tenants.edit_tenant', tenant_id=t.id) }}" class="grid grid-cols-1 md:grid-cols-8 gap-2 mt-2">
+              <input name="name" value="{{ t.name }}" class="input" required>
+              <input name="rent_amount" value="{{ t.rent_amount }}" type="number" step="0.01" class="input">
+              <input name="start_date" value="{{ t.start_date }}" type="date" class="input">
+              <input name="end_date" value="{{ t.end_date }}" type="date" class="input">
+              <input name="consumer_number" value="{{ t.consumer_number }}" class="input">
+              <input name="deposit_amount" value="{{ t.deposit_amount }}" type="number" step="0.01" class="input">
+              <select name="building_id" class="input">
+                {% for b in buildings %}
+                <option value="{{ b.id }}" {% if b.id == t.building_id %}selected{% endif %}>{{ b.name }}</option>
+                {% endfor %}
+              </select>
+              <button class="btn">Update</button>
+            </form>
+          </details>
+          <form method="post" action="{{ url_for('tenants.delete_tenant', tenant_id=t.id) }}" onsubmit="return confirm('Delete tenant?');" class="inline">
+            <button class="btn mt-2">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">Dashboard</h1>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+  <div class="card"><div class="text-sm text-slate-500">Total Buildings</div><div class="text-3xl font-bold">{{ total_buildings }}</div></div>
+  <div class="card"><div class="text-sm text-slate-500">Total Tenants</div><div class="text-3xl font-bold">{{ total_tenants }}</div></div>
+  <div class="card"><div class="text-sm text-slate-500">Lodge Guests</div><div class="text-3xl font-bold">{{ total_guests }}</div></div>
+  <div class="card"><div class="text-sm text-slate-500">Monthly Revenue</div><div class="text-3xl font-bold">₹ {{ '%.2f'|format(monthly_revenue) }}</div></div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+  <div class="card">
+    <div class="text-lg font-semibold mb-2">Rent Trends</div>
+    <canvas id="rentChart"></canvas>
+  </div>
+  <div class="card">
+    <div class="text-lg font-semibold mb-2">Lodge Occupancy</div>
+    <canvas id="lodgeChart"></canvas>
+  </div>
+</div>
+
+<div class="card">
+  <div class="text-lg font-semibold mb-2">AI Insights</div>
+  {% if insights and insights.get('ok') %}
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="p-3 rounded bg-teal-50 dark:bg-slate-700/50">
+        <div class="font-semibold">Rent Performance</div>
+        <div class="text-sm">{{ insights['rent_performance'] }}</div>
+      </div>
+      <div class="p-3 rounded bg-teal-50 dark:bg-slate-700/50">
+        <div class="font-semibold">Occupancy Forecast</div>
+        <div class="text-sm">{{ insights['occupancy_forecast'] }}</div>
+      </div>
+      <div class="p-3 rounded bg-red-50 dark:bg-slate-700/50">
+        <div class="font-semibold">Alerts</div>
+        <div class="text-sm">{{ insights['alerts'] }}</div>
+      </div>
+      <div class="p-3 rounded bg-blue-50 dark:bg-slate-700/50">
+        <div class="font-semibold">Lodge Trends</div>
+        <div class="text-sm">{{ insights['lodge_trends'] }}</div>
+      </div>
+    </div>
+  {% else %}
+    <div class="text-sm text-slate-500">Insights generated locally. Add OPENAI_API_KEY for advanced analysis.</div>
+  {% endif %}
+</div>
+
+<script>
+const rentCtx = document.getElementById('rentChart');
+const lodgeCtx = document.getElementById('lodgeChart');
+new Chart(rentCtx, {
+  type: 'line', data: { labels: {{ rent_trends['labels']|tojson }}, datasets: [{ label: 'Rent', data: {{ rent_trends['values']|tojson }}, borderColor: '#0f766e', tension: 0.3 }] }, options: { responsive: true, plugins: { legend: { display: false } } }
+});
+new Chart(lodgeCtx, {
+  type: 'bar', data: { labels: {{ lodge_occupancy['labels']|tojson }}, datasets: [{ label: 'Occupancy', data: {{ lodge_occupancy['values']|tojson }}, backgroundColor: '#2dd4bf' }] }, options: { responsive: true, plugins: { legend: { display: false } } }
+});
+</script>
+{% endblock %}

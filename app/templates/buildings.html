@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="flex items-center justify-between mb-4">
+  <h1 class="text-2xl font-bold">Buildings</h1>
+  <a href="{{ url_for('buildings.add_building') }}" class="btn">Add Building</a>
+</div>
+
+{% if show_add %}
+<div class="card mb-4">
+  <form method="post" action="{{ url_for('buildings.add_building') }}" class="grid grid-cols-1 md:grid-cols-5 gap-2">
+    <input name="name" placeholder="Name" class="input" required>
+    <input name="address" placeholder="Address" class="input">
+    <input name="pincode" placeholder="Pincode" class="input">
+    <input name="total_rooms" placeholder="Total Rooms" type="number" class="input">
+    <button class="btn">Save</button>
+  </form>
+</div>
+{% endif %}
+
+{% if edit_building %}
+<div class="card mb-4">
+  <form method="post" action="{{ url_for('buildings.edit_building', building_id=edit_building.id) }}" class="grid grid-cols-1 md:grid-cols-5 gap-2">
+    <input name="name" value="{{ edit_building.name }}" class="input" required>
+    <input name="address" value="{{ edit_building.address }}" class="input">
+    <input name="pincode" value="{{ edit_building.pincode }}" class="input">
+    <input name="total_rooms" value="{{ edit_building.total_rooms }}" type="number" class="input">
+    <button class="btn">Update</button>
+  </form>
+</div>
+{% endif %}
+
+<div class="card">
+  <table class="table">
+    <thead>
+      <tr>
+        <th class="th">Name</th>
+        <th class="th">Address</th>
+        <th class="th">Pincode</th>
+        <th class="th">Rooms</th>
+        <th class="th">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for b in buildings %}
+      <tr>
+        <td class="td font-semibold">{{ b.name }}</td>
+        <td class="td">{{ b.address }}</td>
+        <td class="td">{{ b.pincode }}</td>
+        <td class="td">{{ b.total_rooms }}</td>
+        <td class="td space-x-2">
+          <a href="{{ url_for('buildings.building_detail', building_id=b.id) }}" class="btn-outline">Details</a>
+          <a href="{{ url_for('buildings.edit_building', building_id=b.id) }}" class="btn-outline">Edit</a>
+          <form method="post" action="{{ url_for('buildings.delete_building', building_id=b.id) }}" style="display:inline" onsubmit="return confirm('Delete building?');">
+            <button class="btn">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

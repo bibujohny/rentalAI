@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Register - RentalAI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="h-full bg-slate-100 flex items-center justify-center">
+  <div class="w-full max-w-sm bg-white rounded shadow p-6">
+    <div class="flex items-center space-x-2 mb-4">
+      <img src="{{ url_for('static', filename='logo.svg') }}" class="w-8 h-8" alt="logo">
+      <div class="text-xl font-bold text-teal-700">RentalAI</div>
+    </div>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="space-y-2 mb-4">
+          {% for category, msg in messages %}
+            <div class="p-2 rounded {{ 'bg-teal-100 text-teal-800' if category=='success' else 'bg-yellow-100 text-yellow-800' if category=='warning' else 'bg-red-100 text-red-800' if category=='danger' else 'bg-slate-100 text-slate-800' }}">{{ msg }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+    <form method="post" class="space-y-3">
+      <input name="username" placeholder="Username" class="w-full border rounded p-2" required>
+      <input name="password" placeholder="Password" type="password" class="w-full border rounded p-2" required>
+      <button class="w-full bg-teal-600 hover:bg-teal-700 text-white rounded p-2">Register</button>
+    </form>
+    <div class="text-sm text-slate-600 mt-3">Have an account? <a href="{{ url_for('auth.login') }}" class="text-teal-700">Login</a></div>
+  </div>
+</body>
+</html>

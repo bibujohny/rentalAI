@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="192" height="192" viewBox="0 0 192 192" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">RentalAI Logo</title>
+  <desc id="desc">A symbol blending buildings, lodging, location, currency, and AI circuits to represent smarter property and lodge management.</desc>
+
+  <!-- Background: stability and trust (teal gradient) -->
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="192" y2="192" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0f766e"/>
+      <stop offset="100%" stop-color="#2dd4bf"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#0b3f3b" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+  <rect x="8" y="8" width="176" height="176" rx="24" fill="url(#g)" filter="url(#shadow)"/>
+
+  <!-- Subtle rupee watermark: revenue focus -->
+  <text x="150" y="54" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial" font-size="40" fill="#0b3f3b" fill-opacity="0.12">₹</text>
+
+  <!-- Building: long-term rentals -->
+  <g transform="translate(36,44)">
+    <rect x="0" y="0" width="52" height="82" rx="6" fill="#083e3a" fill-opacity="0.2" stroke="#064e3b"/>
+    <!-- windows -->
+    <g fill="#ecfeff">
+      <rect x="10" y="12" width="8" height="8" rx="2"/>
+      <rect x="26" y="12" width="8" height="8" rx="2"/>
+      <rect x="10" y="28" width="8" height="8" rx="2"/>
+      <rect x="26" y="28" width="8" height="8" rx="2"/>
+      <rect x="10" y="44" width="8" height="8" rx="2"/>
+      <rect x="26" y="44" width="8" height="8" rx="2"/>
+    </g>
+    <!-- door -->
+    <rect x="20" y="58" width="12" height="18" rx="2" fill="#ecfeff"/>
+  </g>
+
+  <!-- Lodge bed: daily/monthly stays -->
+  <g transform="translate(96,112)">
+    <rect x="0" y="12" width="64" height="12" rx="3" fill="#ecfeff"/>
+    <rect x="0" y="4" width="44" height="12" rx="3" fill="#d1fae5"/>
+    <circle cx="52" cy="10" r="6" fill="#f0fdfa"/>
+  </g>
+
+  <!-- Location pin: pincode focus (news feature removed, keep pin as location cue) -->
+  <g transform="translate(58,24)">
+    <path d="M24 0c-9.94 0-18 8.06-18 18 0 12.5 18 30 18 30s18-17.5 18-30C42 8.06 33.94 0 24 0z" fill="#f0fdfa" fill-opacity="0.9"/>
+    <circle cx="24" cy="18" r="6" fill="#14b8a6"/>
+  </g>
+
+  <!-- AI circuits: insights and forecasting -->
+  <g transform="translate(104,32)" stroke="#ecfeff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M0 24 C 10 0, 38 0, 48 24" opacity="0.85"/>
+    <path d="M0 40 C 14 16, 34 16, 48 40" opacity="0.7"/>
+    <circle cx="0" cy="24" r="3" fill="#ecfeff"/>
+    <circle cx="48" cy="24" r="3" fill="#ecfeff"/>
+    <circle cx="0" cy="40" r="3" fill="#ecfeff"/>
+    <circle cx="48" cy="40" r="3" fill="#ecfeff"/>
+    <circle cx="24" cy="8" r="3" fill="#ecfeff"/>
+    <circle cx="24" cy="56" r="3" fill="#ecfeff"/>
+  </g>
+
+  <!-- Monogram (RAI): clarity of purpose -->
+  <g transform="translate(16,160)">
+    <text x="0" y="0" font-family="system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial" font-weight="700" font-size="18" fill="#ecfeff" letter-spacing="0.5">RentalAI</text>
+  </g>
+</svg>

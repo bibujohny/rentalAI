@@ -1,0 +1,94 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="flex items-center justify-between mb-4">
+  <h1 class="text-2xl font-bold">Lodge</h1>
+</div>
+
+<div class="card mb-4">
+  <form method="get" class="flex gap-2 mb-2">
+    <select name="status" class="input w-40">
+      <option value="">All Status</option>
+      <option value="checked_in" {% if request.args.get('status')=='checked_in' %}selected{% endif %}>Checked In</option>
+      <option value="checked_out" {% if request.args.get('status')=='checked_out' %}selected{% endif %}>Checked Out</option>
+    </select>
+    <select name="stay_type" class="input w-40">
+      <option value="">All Types</option>
+      <option value="daily" {% if request.args.get('stay_type')=='daily' %}selected{% endif %}>Daily</option>
+      <option value="monthly" {% if request.args.get('stay_type')=='monthly' %}selected{% endif %}>Monthly</option>
+    </select>
+    <button class="btn">Filter</button>
+  </form>
+  <form method="post" action="{{ url_for('lodge.add_guest') }}" class="grid grid-cols-1 md:grid-cols-10 gap-2">
+    <input name="guest_name" placeholder="Guest Name" class="input" required>
+    <input name="room_no" placeholder="Room #" class="input" required>
+    <select name="stay_type" class="input">
+      <option value="daily">Daily</option>
+      <option value="monthly">Monthly</option>
+    </select>
+    <input name="check_in_date" type="date" class="input">
+    <input name="check_out_date" type="date" class="input">
+    <input name="rate_per_day" placeholder="Rate/Day" type="number" step="0.01" class="input">
+    <input name="monthly_rate" placeholder="Monthly Rate" type="number" step="0.01" class="input">
+    <select name="status" class="input">
+      <option value="checked_in">Checked In</option>
+      <option value="checked_out">Checked Out</option>
+    </select>
+    <button class="btn">Add</button>
+  </form>
+</div>
+
+<div class="card">
+  <table class="table">
+    <thead>
+      <tr>
+        <th class="th">Guest</th><th class="th">Room</th><th class="th">Type</th><th class="th">Check In</th><th class="th">Check Out</th><th class="th">Rate/Day</th><th class="th">Monthly Rate</th><th class="th">Total</th><th class="th">Status</th><th class="th">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for g in guests %}
+      <tr>
+        <td class="td">{{ g.guest_name }}</td>
+        <td class="td">{{ g.room_no }}</td>
+        <td class="td">{{ g.stay_type }}</td>
+        <td class="td">{{ g.check_in_date }}</td>
+        <td class="td">{{ g.check_out_date or '-' }}</td>
+        <td class="td">₹ {{ '%.2f'|format(g.rate_per_day) }}</td>
+        <td class="td">₹ {{ '%.2f'|format(g.monthly_rate) }}</td>
+        <td class="td">₹ {{ '%.2f'|format(g.total_amount) }}</td>
+        <td class="td">{{ g.status }}</td>
+        <td class="td">
+          <details>
+            <summary class="cursor-pointer text-teal-600">Edit</summary>
+            <form method="post" action="{{ url_for('lodge.edit_guest', guest_id=g.id) }}" class="grid grid-cols-1 md:grid-cols-10 gap-2 mt-2">
+              <input name="guest_name" value="{{ g.guest_name }}" class="input" required>
+              <input name="room_no" value="{{ g.room_no }}" class="input" required>
+              <select name="stay_type" class="input">
+                <option value="daily" {% if g.stay_type=='daily' %}selected{% endif %}>Daily</option>
+                <option value="monthly" {% if g.stay_type=='monthly' %}selected{% endif %}>Monthly</option>
+              </select>
+              <input name="check_in_date" value="{{ g.check_in_date }}" type="date" class="input">
+              <input name="check_out_date" value="{{ g.check_out_date }}" type="date" class="input">
+              <input name="rate_per_day" value="{{ g.rate_per_day }}" type="number" step="0.01" class="input">
+              <input name="monthly_rate" value="{{ g.monthly_rate }}" type="number" step="0.01" class="input">
+              <select name="status" class="input">
+                <option value="checked_in" {% if g.status=='checked_in' %}selected{% endif %}>Checked In</option>
+                <option value="checked_out" {% if g.status=='checked_out' %}selected{% endif %}>Checked Out</option>
+              </select>
+              <button class="btn">Update</button>
+            </form>
+          </details>
+          {% if g.status != 'checked_out' %}
+          <form method="post" action="{{ url_for('lodge.checkout_guest', guest_id=g.id) }}" class="inline">
+            <button class="btn mt-2">Mark as Checked Out</button>
+          </form>
+          {% endif %}
+          <form method="post" action="{{ url_for('lodge.delete_guest', guest_id=g.id) }}" onsubmit="return confirm('Delete entry?');" class="inline">
+            <button class="btn mt-2">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

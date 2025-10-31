@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">Building Details</h1>
+
+<div class="card mb-4">
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+    <div>
+      <div class="text-sm text-slate-500">Name</div>
+      <div class="font-semibold">{{ building.name }}</div>
+    </div>
+    <div>
+      <div class="text-sm text-slate-500">Pincode</div>
+      <div class="font-semibold">{{ building.pincode or '-' }}</div>
+    </div>
+    <div>
+      <div class="text-sm text-slate-500">Address</div>
+      <div class="font-semibold">{{ building.address or '-' }}</div>
+    </div>
+    <div>
+      <div class="text-sm text-slate-500">Total Rooms</div>
+      <div class="font-semibold">{{ building.total_rooms }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="text-lg font-semibold mb-2">Current Tenants</div>
+  {% if tenants %}
+  <table class="table">
+    <thead>
+      <tr>
+        <th class="th">Name</th>
+        <th class="th">Rent</th>
+        <th class="th">Start</th>
+        <th class="th">End</th>
+        <th class="th">Consumer #</th>
+        <th class="th">Deposit</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in tenants %}
+      <tr>
+        <td class="td">{{ t.name }}</td>
+        <td class="td">₹ {{ '%.2f'|format(t.rent_amount) }}</td>
+        <td class="td">{{ t.start_date }}</td>
+        <td class="td">{{ t.end_date or '-' }}</td>
+        <td class="td">{{ t.consumer_number or '-' }}</td>
+        <td class="td">₹ {{ '%.2f'|format(t.deposit_amount) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="text-sm text-slate-500">No tenants for this building yet.</div>
+  {% endif %}
+</div>
+{% endblock %}
