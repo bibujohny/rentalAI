@@ -54,11 +54,15 @@ def summary():
             flash(f'Upload failed: {e}', 'danger')
             return render_template('pdf_summary.html', result=None)
         try:
+            using_default = '(default)' if (not request.form.get('password') and password) else ''
+            current_app.logger.info(f"PDF processing started file={path}, password_used={bool(password)} {using_default}")
             text = extract_text_from_pdf(path, password=password)
+            current_app.logger.info(f"PDF extracted length={len(text) if text else 0}")
             if not text:
                 flash('Could not extract text. Check password or PDF type (scanned PDFs may need OCR).', 'danger')
             else:
                 result = summarize_month(text)
+                current_app.logger.info(f"PDF summary result={result}")
         except Exception as e:
             current_app.logger.exception("PDF processing failed")
             flash(f'Error processing PDF: {e}', 'danger')
