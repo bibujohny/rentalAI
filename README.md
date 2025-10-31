@@ -1,7 +1,7 @@
 RentalAI v2
 ===========
 
-A beautiful, reliable property & lodge management app built with Flask + SQLite.
+A beautiful, reliable property and lodge management app built with Flask + SQLite.
 
 Features
 - Authentication with Flask-Login
