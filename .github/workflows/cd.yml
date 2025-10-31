@@ -38,24 +38,7 @@ jobs:
               git clone https://github.com/${{ github.repository }} /opt/rentalai/app
             fi
             cd /opt/rentalai/app
-            git fetch --all --prune
-            git reset --hard origin/main
-            if [ ! -d .venv ]; then python3 -m venv .venv; fi
-            source .venv/bin/activate
-            pip install --upgrade pip
-            pip install -r requirements.txt
-            python3 - <<'PY'
-from app import create_app
-from flask_migrate import upgrade
-app = create_app()
-with app.app_context():
-    try:
-        upgrade()
-        print('Applied migrations (if any).')
-    except Exception as e:
-        print('Migrate skipped or failed:', e)
-PY
-            sudo systemctl restart rentalai
+            bash ./scripts/deploy_remote.sh
             # Smoke check (Gunicorn direct)
             curl -fsS -I http://127.0.0.1:8000/ >/dev/null || (journalctl -u rentalai -n 100 --no-pager; exit 1)
             # Optional: If Nginx is fronting, also verify HTTP 200/302
