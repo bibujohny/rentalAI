@@ -12,16 +12,21 @@ try:
 except Exception:  # pragma: no cover
     PdfReader = None
 
-
+# Broadened keyword lists for better matching
 INCOME_KEYWORDS = [
-    r"\brent\b", r"\blodge\b", r"\breceipt\b", r"\bincome\b", r"\brevenue\b",
-    r"\badvance\b", r"\bdeposit\b", r"\broombooking\b", r"\broombook\b",
+    r"\brent\b", r"\blodge\b", r"\bincome\b", r"\brevenue\b", r"\breceipt\b", r"\breceived\b",
+    r"\badvance\b", r"\bdeposit\b", r"\bcollection\b", r"\broom\b", r"\bbooking\b", r"\bcredit\b", r"\bcr\b",
+    r"\bmonthly\s+rent\b", r"\btenants?\b",
 ]
 EXPENSE_KEYWORDS = [
-    r"\belectricity\b", r"\bmaintenance\b", r"\bsalary\b", r"\bexpense\b",
-    r"\bpayment\b", r"\boutflow\b", r"\btax\b", r"\bwater\b", r"\brentpaid\b",
+    r"\bexpense\b", r"\bpaid\b", r"\bpayment\b", r"\boutflow\b", r"\bdebit\b", r"\bdr\b",
+    r"\belectricity\b", r"\bpower\b", r"\bkseb\b", r"\bwater\b", r"\bgst\b", r"\btax\b",
+    r"\bmaintenance\b", r"\brepair\b", r"\bwage\b", r"\bsalary\b", r"\bpurchase\b", r"\bsuppl(y|ies)\b",
 ]
-AMOUNT_RE = re.compile(r"(?i)(?:rs\.?|inr|₹)\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)")
+
+# Amount detection: capture currency or plain numeric tokens with commas/decimals, optional parentheses for negatives
+CURRENCY = r"(?:₹|rs\.?|inr)"
+AMOUNT_TOKEN = re.compile(rf"(?i)(?<![\w])((?:{CURRENCY})?\s*\(?[+-]?\d{{1,3}}(?:,\d{{2,3}})*(?:\.\d{{1,2}})?|\d+(?:\.\d{{1,2}})?)\)?(?![\w])")
 
 
 def extract_text_from_pdf(path: str, password: str | None = None) -> str:
@@ -51,6 +56,32 @@ def extract_text_from_pdf(path: str, password: str | None = None) -> str:
     return text
 
 
+def _parse_amount_tokens(line: str, keywords_present: bool) -> float:
+    """Find and sum amount tokens in a line.
+    If there is no currency symbol present, we only consider bare numbers when keywords are present to reduce false positives.
+    Parentheses or leading '-' make the number negative."""
+    total = 0.0
+    found_any = False
+    for m in AMOUNT_TOKEN.finditer(line):
+        raw = m.group(1)
+        if not raw:
+            continue
+        if not re.search(CURRENCY, raw, re.IGNORECASE):
+            if not keywords_present:
+                # Skip bare numbers if the line has no relevant keywords
+                continue
+        neg = raw.strip().startswith('-') or '(' in raw
+        cleaned = re.sub(CURRENCY, '', raw, flags=re.IGNORECASE)
+        cleaned = cleaned.replace(',', '').replace('(', '').replace(')', '').strip()
+        try:
+            val = float(cleaned)
+            total += (-val if neg else val)
+            found_any = True
+        except Exception:
+            continue
+    return total if found_any else 0.0
+
+
 def summarize_month(text: str) -> Dict[str, float | str]:
     """Heuristic parse. Classify lines into income vs expenses using keyword matches; sum amounts.
     Returns a dict with totals and small breakdown counts."""
@@ -59,23 +90,47 @@ def summarize_month(text: str) -> Dict[str, float | str]:
     income_lines = 0
     expense_lines = 0
 
-    lines = [ln.strip().lower() for ln in text.splitlines() if ln.strip()]
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
     for ln in lines:
-        # detect amounts in the line; sum all found amounts on the line
-        amounts = [float(a.replace(',', '')) for a in AMOUNT_RE.findall(ln)]
-        if not amounts:
+        lower = ln.lower()
+        has_income_kw = any(re.search(k, lower) for k in INCOME_KEYWORDS)
+        has_expense_kw = any(re.search(k, lower) for k in EXPENSE_KEYWORDS)
+
+        # Special totals
+        if 'total income' in lower:
+            amt = _parse_amount_tokens(lower, True)
+            if amt:
+                income_total += abs(amt)
+                income_lines += 1
+                continue
+        if 'total expense' in lower or 'total expenses' in lower:
+            amt = _parse_amount_tokens(lower, True)
+            if amt:
+                expense_total += abs(amt)
+                expense_lines += 1
+                continue
+
+        amt = _parse_amount_tokens(lower, has_income_kw or has_expense_kw)
+        if not amt:
             continue
-        amt = sum(amounts)
-        # classify by keywords
-        if any(re.search(k, ln) for k in INCOME_KEYWORDS):
-            income_total += amt
+
+        if has_income_kw and not has_expense_kw:
+            income_total += abs(amt)
             income_lines += 1
-        elif any(re.search(k, ln) for k in EXPENSE_KEYWORDS):
-            expense_total += amt
+        elif has_expense_kw and not has_income_kw:
+            expense_total += abs(amt)
             expense_lines += 1
         else:
-            # fallback: positive amounts without keywords are ambiguous; ignore
-            pass
+            # fallback based on signs / credit-debit hints
+            if 'credit' in lower or ' cr' in lower:
+                income_total += abs(amt)
+                income_lines += 1
+            elif 'debit' in lower or ' dr' in lower:
+                expense_total += abs(amt)
+                expense_lines += 1
+            else:
+                # Ambiguous; skip
+                pass
 
     net = round(income_total - expense_total, 2)
     return {
