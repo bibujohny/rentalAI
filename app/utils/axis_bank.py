@@ -113,8 +113,13 @@ def parse_axis_statement_from_tables(path: str, password: Optional[str] = None) 
                         d_iso = _parse_date(str(raw_date)) if raw_date else None
 
                         # Continuation lines (no date) -> append to previous row
-                        if not d_iso and last_row and str(raw_part).strip():
-                            cont_text = ' '.join(str(c).strip() for c in cells if str(c).strip())
+                        # Skip if this looks like a summary line (transaction total/closing balance)
+                        if not d_iso:
+                            if str(raw_part).strip().lower().startswith(('transaction total','closing balance')):
+                                last_row = None
+                                continue
+                            if last_row and str(raw_part).strip():
+                                cont_text = ' '.join(str(c).strip() for c in cells if str(c).strip())
                             # Try to update debit/credit from columns if present
                             if idx_debit is not None and idx_debit < len(cells):
                                 deb = _parse_amount(cells[idx_debit])
@@ -137,8 +142,9 @@ def parse_axis_statement_from_tables(path: str, password: Optional[str] = None) 
                             # Can't parse this line
                             continue
 
-                        # Skip opening balance
-                        if str(raw_part).strip().lower().startswith('opening balance'):
+                        # Skip balance/total summary rows
+                        low_part = str(raw_part).strip().lower()
+                        if low_part.startswith('opening balance') or low_part.startswith('transaction total') or low_part.startswith('closing balance'):
                             last_row = None
                             continue
 
@@ -222,7 +228,7 @@ def parse_axis_statement_from_text(text: str) -> List[Dict]:
 
     flush()
     # Filter out obvious non-rows
-    out = [r for r in out if r['particulars'].lower() != 'opening balance']
+    out = [r for r in out if r['particulars'].lower() not in ('opening balance','transaction total','closing balance')]
     return out
 
 
