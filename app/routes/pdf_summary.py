@@ -4,6 +4,8 @@ import os, uuid
 from werkzeug.utils import secure_filename
 from ..utils.pdf_summary import extract_text_from_pdf, summarize_month
 from ..utils.axis_bank import parse_axis_pdf
+from ..models_monthly import MonthlySummary
+from ..models import db
 
 pdf_bp = Blueprint('pdf', __name__, url_prefix='/pdf')
 
@@ -92,6 +94,69 @@ def summary():
                 pass
 
     return render_template('pdf_summary.html', result=result)
+
+
+@pdf_bp.route('/save-monthly', methods=['POST'])
+@login_required
+def save_monthly():
+    try:
+        year = int(request.form.get('year'))
+        month = int(request.form.get('month'))
+    except Exception:
+        flash('Select a valid month and year.', 'warning')
+        return render_template('pdf_summary.html', result=None)
+
+    mode = request.form.get('mode') or 'net'  # 'income' or 'net'
+    try:
+        income_total = float(request.form.get('income_total') or 0)
+        expense_total = float(request.form.get('expense_total') or 0)
+        net_total = float(request.form.get('net') or (income_total - expense_total))
+    except Exception:
+        flash('Invalid totals provided.', 'danger')
+        return render_template('pdf_summary.html', result=None)
+
+    value = income_total if mode == 'income' else net_total
+
+    existing = MonthlySummary.query.filter_by(year=year, month=month).first()
+    if existing:
+        existing.lodge_chakravarthy = 0.0
+        existing.monthly_rent_building = 0.0
+        existing.lodge_relax_inn = 0.0
+        existing.misc_income = value
+        existing.compute_total()
+        existing.notes = (existing.notes or '') + ' Imported from PDF summary.'
+        existing.ensure_period_defaults()
+        db.session.commit()
+        flash('Monthly summary updated.', 'success')
+        return render_template('pdf_summary.html', result={
+            'income_total': income_total,
+            'expense_total': expense_total,
+            'net': net_total,
+            'income_entries': int(request.form.get('income_entries') or 0),
+            'expense_entries': int(request.form.get('expense_entries') or 0),
+        })
+
+    ms = MonthlySummary(
+        year=year,
+        month=month,
+        lodge_chakravarthy=0.0,
+        monthly_rent_building=0.0,
+        lodge_relax_inn=0.0,
+        misc_income=value,
+        notes='Imported from PDF summary.',
+    )
+    ms.ensure_period_defaults()
+    ms.compute_total()
+    db.session.add(ms)
+    db.session.commit()
+    flash('Monthly summary saved.', 'success')
+    return render_template('pdf_summary.html', result={
+        'income_total': income_total,
+        'expense_total': expense_total,
+        'net': net_total,
+        'income_entries': int(request.form.get('income_entries') or 0),
+        'expense_entries': int(request.form.get('expense_entries') or 0),
+    })
 
 
 @pdf_bp.route('/axis', methods=['GET', 'POST'])
