@@ -207,6 +207,28 @@ def axis_to_json():
                 filtered.append(r)
             rows = filtered
             current_app.logger.info(f"Axis kept {len(rows)} rows after removing summary rows and double-sided entries")
+
+            # Classify incomes: Office Rental vs Lodge based on payer names in particulars
+            office_keywords = [
+                'hi tech med gas solutions',
+                'meerathan',
+                'brilliant',
+                'rinuraju',
+            ]
+            office_income_total = 0.0
+            lodge_income_total = 0.0
+            for r in rows:
+                r['income_type'] = None
+                credit = r.get('credit') or 0.0
+                if credit:
+                    part = (r.get('particulars') or '').lower()
+                    if any(k in part for k in office_keywords):
+                        r['income_type'] = 'office'
+                        office_income_total += credit
+                    else:
+                        r['income_type'] = 'lodge'
+                        lodge_income_total += credit
+
             json_rows = rows
             if rows:
                 income_total = round(sum((r.get('credit') or 0.0) for r in rows), 2)
@@ -216,6 +238,8 @@ def axis_to_json():
                     'expense_total': expense_total,
                     'net': round(income_total - expense_total, 2),
                     'count': len(rows),
+                    'office_income_total': round(office_income_total, 2),
+                    'lodge_income_total': round(lodge_income_total, 2),
                 }
             else:
                 flash('No transactions found. Check that this is an Axis Bank statement with a visible transactions table.', 'warning')

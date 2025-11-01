@@ -32,14 +32,18 @@
 </div>
 
 {% if json_rows is not none %}
-<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
   <div class="p-4 rounded bg-teal-50 dark:bg-slate-700/50">
     <div class="text-sm text-slate-500">Total Income (Cr)</div>
     <div class="text-3xl font-bold">₹ {{ '%.2f'|format(totals.income_total if totals else 0) }}</div>
   </div>
-  <div class="p-4 rounded bg-red-50 dark:bg-slate-700/50">
-    <div class="text-sm text-slate-500">Total Expenses (Dr)</div>
-    <div class="text-3xl font-bold">₹ {{ '%.2f'|format(totals.expense_total if totals else 0) }}</div>
+  <div class="p-4 rounded bg-emerald-50 dark:bg-slate-700/50">
+    <div class="text-sm text-slate-500">Office Rental Income</div>
+    <div class="text-3xl font-bold">₹ {{ '%.2f'|format(totals.office_income_total if totals and totals.office_income_total is defined else 0) }}</div>
+  </div>
+  <div class="p-4 rounded bg-cyan-50 dark:bg-slate-700/50">
+    <div class="text-sm text-slate-500">Lodge Income</div>
+    <div class="text-3xl font-bold">₹ {{ '%.2f'|format(totals.lodge_income_total if totals and totals.lodge_income_total is defined else 0) }}</div>
   </div>
   <div class="p-4 rounded bg-blue-50 dark:bg-slate-700/50">
     <div class="text-sm text-slate-500">Net</div>
@@ -56,6 +60,7 @@
         <th class="th">Particulars</th>
         <th class="th text-right">Debit</th>
         <th class="th text-right">Credit</th>
+        <th class="th">Tag</th>
       </tr>
     </thead>
     <tbody>
@@ -65,6 +70,11 @@
         <td class="td">{{ r.particulars if r.particulars is defined else r['particulars'] }}</td>
         <td class="td text-right">{% if r.debit is defined and r.debit is not none %}₹ {{ '%.2f'|format(r.debit) }}{% elif r['debit'] is not none %}₹ {{ '%.2f'|format(r['debit']) }}{% else %}-{% endif %}</td>
         <td class="td text-right">{% if r.credit is defined and r.credit is not none %}₹ {{ '%.2f'|format(r.credit) }}{% elif r['credit'] is not none %}₹ {{ '%.2f'|format(r['credit']) }}{% else %}-{% endif %}</td>
+        <td class="td">
+          {% if r.income_type is defined %}
+            {% if r.income_type == 'office' %}<span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-xs">Office</span>{% elif r.income_type == 'lodge' %}<span class="px-2 py-0.5 rounded bg-cyan-100 text-cyan-800 text-xs">Lodge</span>{% endif %}
+          {% else %}-{% endif %}
+        </td>
       </tr>
       {% endfor %}
     </tbody>
