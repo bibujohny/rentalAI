@@ -39,13 +39,13 @@
       {% for r in rows %}
       <tr>
         <td class="td font-semibold">{{ r.display_month if r.display_month is defined else ("%02d"|format(r.month)) }}</td>
-        <td class="td">₹ {{ '%.2f'|format(r.pb_chak_cash or 0) }}</td>
-        <td class="td">₹ {{ '%.2f'|format(r.pb_chak_upi or 0) }}</td>
-        <td class="td">₹ {{ '%.2f'|format(r.monthly_rent_building or 0) }}</td>
-        <td class="td">₹ {{ '%.2f'|format(r.pb_rel_cash or 0) }}</td>
-        <td class="td">₹ {{ '%.2f'|format(r.pb_rel_upi or 0) }}</td>
-        <td class="td">₹ {{ '%.2f'|format(r.misc_income or 0) }}</td>
-        <td class="td font-semibold">₹ {{ '%.2f'|format(r.total_income or 0) }}</td>
+        <td class="td">₹ {{ (r.pb_chak_cash or 0)|fmt_money }}</td>
+        <td class="td">₹ {{ (r.pb_chak_upi or 0)|fmt_money }}</td>
+        <td class="td">₹ {{ (r.monthly_rent_building or 0)|fmt_money }}</td>
+        <td class="td">₹ {{ (r.pb_rel_cash or 0)|fmt_money }}</td>
+        <td class="td">₹ {{ (r.pb_rel_upi or 0)|fmt_money }}</td>
+        <td class="td">₹ {{ (r.misc_income or 0)|fmt_money }}</td>
+        <td class="td font-semibold">₹ {{ (r.total_income or 0)|fmt_money }}</td>
         <td class="td text-sm">{{ r.period_start }} — {{ r.period_end }}</td>
         <td class="td space-x-2">
           <a class="btn-outline" href="{{ url_for('summaries.edit_summary', item_id=r.id) }}">Edit</a>
