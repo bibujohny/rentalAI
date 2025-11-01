@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, flash, current_app, jsonify
 from flask_login import login_required
 import os, uuid, shutil, json
-from datetime import date
+from datetime import date, datetime
 from werkzeug.utils import secure_filename
 from ..utils.pdf_summary import extract_text_from_pdf, summarize_month
 from ..utils.axis_bank import parse_axis_pdf
@@ -173,6 +173,8 @@ def axis_to_json():
     cur_year = date.today().year
     cur_month = date.today().month
     years = list(range(2022, 2036))
+    saved_files = None
+    loaded_file = None
 
     def saved_data_dir(y: int, m: int) -> str:
         updir = upload_dir()
@@ -183,15 +185,36 @@ def axis_to_json():
     # View saved data (GET)
     view_year = request.args.get('view_year', type=int)
     view_month = request.args.get('view_month', type=int)
+    view_file = request.args.get('view_file')
     if request.method == 'GET' and view_year and view_month:
         try:
             sdir = saved_data_dir(view_year, view_month)
             files = [os.path.join(sdir, f) for f in os.listdir(sdir) if f.endswith('.json')]
-            if not files:
+            files_meta = []
+            for p in files:
+                try:
+                    st = os.stat(p)
+                    files_meta.append({
+                        'name': os.path.basename(p),
+                        'mtime': datetime.fromtimestamp(st.st_mtime).strftime('%Y-%m-%d %H:%M'),
+                        'size_kb': round(st.st_size / 1024, 1),
+                        'path': p,
+                    })
+                except Exception:
+                    continue
+            # sort by mtime desc using actual file mtime
+            files_meta.sort(key=lambda x: os.path.getmtime(os.path.join(sdir, x['name'])), reverse=True)
+            saved_files = files_meta
+            if not files_meta:
                 flash('No saved data found for the selected month.', 'warning')
             else:
-                latest = max(files, key=lambda p: os.path.getmtime(p))
-                with open(latest, 'r', encoding='utf-8') as fh:
+                chosen = None
+                if view_file and any(f['name'] == view_file for f in files_meta):
+                    chosen = os.path.join(sdir, view_file)
+                else:
+                    chosen = os.path.join(sdir, files_meta[0]['name'])
+                loaded_file = os.path.basename(chosen)
+                with open(chosen, 'r', encoding='utf-8') as fh:
                     data = json.load(fh)
                 rows = data.get('rows') or []
                 # Recompute subtotals if not stored
@@ -323,4 +346,4 @@ def axis_to_json():
     # JSON toggle
     if request.args.get('format') == 'json':
         return jsonify(json_rows or [])
-    return render_template('pdf_axis.html', json_rows=json_rows, totals=totals, years=years, cur_year=cur_year, cur_month=cur_month)
+    return render_template('pdf_axis.html', json_rows=json_rows, totals=totals, years=years, cur_year=cur_year, cur_month=cur_month, saved_files=saved_files, loaded_file=loaded_file, view_year=view_year, view_month=view_month)

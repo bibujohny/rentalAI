@@ -47,15 +47,25 @@
       <div class="grid grid-cols-2 gap-2">
         <select name="view_month" class="input">
           {% for m in range(1,13) %}
-            <option value="{{ m }}">{{ "%02d"|format(m) }}</option>
+            <option value="{{ m }}" {% if view_month is defined and view_month==m %}selected{% endif %}>{{ "%02d"|format(m) }}</option>
           {% endfor %}
         </select>
         <select name="view_year" class="input">
           {% for y in years %}
-            <option value="{{ y }}" {% if cur_year and cur_year==y %}selected{% endif %}>{{ y }}</option>
+            <option value="{{ y }}" {% if (view_year is defined and view_year==y) or (not view_year and cur_year==y) %}selected{% endif %}>{{ y }}</option>
           {% endfor %}
         </select>
       </div>
+    </div>
+    <div class="md:col-span-3" id="savedFilesBox">
+      {% if saved_files %}
+      <label class="text-sm text-slate-500">Saved files</label>
+      <select name="view_file" class="input">
+        {% for f in saved_files %}
+          <option value="{{ f.name }}" {% if loaded_file and loaded_file==f.name %}selected{% endif %}>{{ f.name }} ({{ f.mtime }}, {{ f.size_kb }} KB)</option>
+        {% endfor %}
+      </select>
+      {% endif %}
     </div>
     <div class="flex items-end md:col-span-1">
       <button class="btn" type="submit">Load Saved Data</button>
