@@ -192,7 +192,16 @@ def axis_to_json():
         try:
             current_app.logger.info(f"Axis parse started file={path}, password_used={bool(password)}")
             rows = parse_axis_pdf(path, password=password)
-            current_app.logger.info(f"Axis parsed {len(rows)} rows")
+            current_app.logger.info(f"Axis parsed {len(rows)} rows before filtering")
+            # Remove summary rows: TRANSACTION TOTAL and CLOSING BALANCE
+            filtered = []
+            for r in rows:
+                part = (r.get('particulars') or '').strip().lower()
+                if part.startswith('transaction total') or part.startswith('closing balance'):
+                    continue
+                filtered.append(r)
+            rows = filtered
+            current_app.logger.info(f"Axis kept {len(rows)} rows after removing summary rows")
             json_rows = rows
             if rows:
                 income_total = round(sum((r.get('credit') or 0.0) for r in rows), 2)
