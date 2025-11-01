@@ -14,7 +14,7 @@ except Exception:
     PdfReader = None
 
 
-def _parse_amount(cell: str | None) -> Optional[float]:
+def _parse_amount(cell: Optional[str]) -> Optional[float]:
     if not cell:
         return None
     s = str(cell).strip()
@@ -34,7 +34,7 @@ def _parse_amount(cell: str | None) -> Optional[float]:
         return None
 
 
-def _parse_date(cell: str | None) -> Optional[str]:
+def _parse_date(cell: Optional[str]) -> Optional[str]:
     if not cell:
         return None
     s = str(cell).strip()
@@ -49,7 +49,7 @@ def _parse_date(cell: str | None) -> Optional[str]:
     return None
 
 
-def _clean_particulars(cell: str | None) -> str:
+def _clean_particulars(cell: Optional[str]) -> str:
     if not cell:
         return ''
     return ' '.join(str(cell).split())

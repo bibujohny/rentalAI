@@ -28,7 +28,7 @@ def register():
         if User.query.filter_by(username=username).first():
             flash('Username already exists', 'warning')
             return redirect(url_for('auth.register'))
-        user = User(username=username, password=generate_password_hash(password))
+        user = User(username=username, password=generate_password_hash(password, method='pbkdf2:sha256'))
         db.session.add(user)
         db.session.commit()
         flash('Registration successful. Please login.', 'success')
@@ -64,7 +64,7 @@ def change_password():
             return redirect(url_for('auth.change_password'))
 
         # Update
-        current_user.password = generate_password_hash(new_pw)
+        current_user.password = generate_password_hash(new_pw, method='pbkdf2:sha256')
         db.session.commit()
         flash('Password updated successfully', 'success')
         return redirect(url_for('dashboard.home'))

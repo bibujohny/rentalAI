@@ -1,5 +1,5 @@
 import re
-from typing import Tuple, Dict
+from typing import Tuple, Dict, Optional, Union
 from .ocr import ocr_pdf_to_text
 
 try:
@@ -29,7 +29,7 @@ CURRENCY = r"(?:₹|rs\.?|inr)"
 AMOUNT_TOKEN = re.compile(rf"(?i)(?<![\w])((?:{CURRENCY})?\s*\(?[+-]?\d{{1,3}}(?:,\d{{2,3}})*(?:\.\d{{1,2}})?|\d+(?:\.\d{{1,2}})?)\)?(?![\w])")
 
 
-def extract_text_from_pdf(path: str, password: str | None = None) -> str:
+def extract_text_from_pdf(path: str, password: Optional[str] = None) -> str:
     """Extract text from a (possibly encrypted) PDF using pypdf, fallback to pdfplumber."""
     text = ""
     # First try pypdf
@@ -82,7 +82,7 @@ def _parse_amount_tokens(line: str, keywords_present: bool) -> float:
     return total if found_any else 0.0
 
 
-def summarize_month(text: str) -> Dict[str, float | str]:
+def summarize_month(text: str) -> Dict[str, Union[float, str]]:
     """Heuristic parse. Classify lines into income vs expenses using keyword matches; sum amounts.
     Returns a dict with totals and small breakdown counts."""
     income_total = 0.0

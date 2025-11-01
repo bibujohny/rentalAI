@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
 from datetime import date
+from typing import Optional
 from ..models import db
 from ..models_monthly import MonthlySummary
 import json
@@ -11,7 +12,7 @@ summaries_bp = Blueprint('summaries', __name__, url_prefix='/summaries')
 PB_START = "[[PB:"
 PB_END = "]]"
 
-def _parse_breakdown(notes: str | None):
+def _parse_breakdown(notes: Optional[str]):
     """Extract payment breakdown from notes.
     Format: [[PB:{"chakravarthy":{"cash":0,"upi":0},"relax_inn":{"cash":0,"upi":0}}]] optional free text after.
     Returns (breakdown_dict, free_text)
@@ -39,7 +40,7 @@ def _parse_breakdown(notes: str | None):
         return default, s
 
 
-def _embed_breakdown(breakdown: dict, free_text: str | None) -> str:
+def _embed_breakdown(breakdown: dict, free_text: Optional[str]) -> str:
     pb = PB_START + json.dumps(breakdown, separators=(",", ":")) + PB_END
     txt = (free_text or "").strip()
     return pb + (" " + txt if txt else "")

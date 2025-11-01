@@ -59,7 +59,7 @@ def seed_demo_data():
     # Seed a default user
     if not User.query.filter_by(username="admin").first():
         from werkzeug.security import generate_password_hash
-        db.session.add(User(username="admin", password=generate_password_hash("admin")))
+        db.session.add(User(username="admin", password=generate_password_hash("admin", method='pbkdf2:sha256')))
         db.session.commit()
 
     # Seed building
