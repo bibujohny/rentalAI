@@ -70,6 +70,8 @@ def summary():
                 try:
                     if (not result) or ((result.get('income_entries', 0) == 0) and (result.get('expense_entries', 0) == 0)):
                         rows = parse_axis_pdf(path, password=password)
+                        # Safety: drop any rows that have both debit and credit populated
+                        rows = [r for r in (rows or []) if not (r.get('debit') is not None and r.get('credit') is not None)]
                         if rows:
                             income_total = round(sum((r.get('credit') or 0.0) for r in rows), 2)
                             expense_total = round(sum((r.get('debit') or 0.0) for r in rows), 2)
@@ -193,15 +195,18 @@ def axis_to_json():
             current_app.logger.info(f"Axis parse started file={path}, password_used={bool(password)}")
             rows = parse_axis_pdf(path, password=password)
             current_app.logger.info(f"Axis parsed {len(rows)} rows before filtering")
-            # Remove summary rows: TRANSACTION TOTAL and CLOSING BALANCE
+            # Remove summary rows and hide any row that has both debit and credit
             filtered = []
             for r in rows:
                 part = (r.get('particulars') or '').strip().lower()
                 if part.startswith('transaction total') or part.startswith('closing balance'):
                     continue
+                if r.get('debit') is not None and r.get('credit') is not None:
+                    # hide rows where both amounts are set (likely a balance merged in)
+                    continue
                 filtered.append(r)
             rows = filtered
-            current_app.logger.info(f"Axis kept {len(rows)} rows after removing summary rows")
+            current_app.logger.info(f"Axis kept {len(rows)} rows after removing summary rows and double-sided entries")
             json_rows = rows
             if rows:
                 income_total = round(sum((r.get('credit') or 0.0) for r in rows), 2)
