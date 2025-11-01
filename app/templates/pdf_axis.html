@@ -76,8 +76,23 @@
 </div>
 
 <div class="card overflow-auto">
-  <div class="text-sm text-slate-500 mb-2">Extracted {{ json_rows|length }} transactions</div>
-  <table class="table">
+  <div class="flex items-center justify-between mb-2">
+    <div class="text-sm text-slate-500">Extracted {{ json_rows|length }} transactions</div>
+    <div class="flex items-center gap-2">
+      <label class="text-sm text-slate-500">Sort by</label>
+      <select id="sort_by" class="input w-40">
+        <option value="date">Date</option>
+        <option value="amount">Amount</option>
+        <option value="tag">Tag (Office/Lodge)</option>
+      </select>
+      <select id="sort_dir" class="input w-32">
+        <option value="asc">Ascending</option>
+        <option value="desc" selected>Descending</option>
+      </select>
+      <button class="btn" type="button" onclick="sortAxisTable()">Apply</button>
+    </div>
+  </div>
+  <table class="table" id="axisTable">
     <thead>
       <tr>
         <th class="th">Date</th>
@@ -89,14 +104,22 @@
     </thead>
     <tbody>
       {% for r in json_rows %}
-      <tr>
-        <td class="td whitespace-nowrap">{% set d = (r.date if r.date is defined else r['date']) %}{% if d %}{% set p = d.split('-') %}{{ p[2] }}-{{ p[1] }}-{{ p[0] }}{% else %}-{% endif %}</td>
+      {% set d0 = (r.date if r.date is defined else r['date']) %}
+      {% set amt = (r.credit if (r.credit is defined and r.credit is not none) else (r['credit'] if r['credit'] is not none else None)) %}
+      {% if amt is none %}
+        {% set d_amt = (r.debit if (r.debit is defined and r.debit is not none) else (r['debit'] if r['debit'] is not none else 0)) %}
+        {% set amt = 0 - d_amt %}
+      {% endif %}
+      <tr data-date="{{ d0 or '' }}" data-amount="{{ '%.2f'|format(amt or 0) }}" data-tag="{{ (r.income_type if r.income_type is defined else r['income_type']) if ('income_type' in r) else '' }}">
+        <td class="td whitespace-nowrap">{% if d0 %}{% set p = d0.split('-') %}{{ p[2] }}-{{ p[1] }}-{{ p[0] }}{% else %}-{% endif %}</td>
         <td class="td">{{ r.particulars if r.particulars is defined else r['particulars'] }}</td>
         <td class="td text-right">{% if r.debit is defined and r.debit is not none %}₹ {{ '%.2f'|format(r.debit) }}{% elif r['debit'] is not none %}₹ {{ '%.2f'|format(r['debit']) }}{% else %}-{% endif %}</td>
         <td class="td text-right">{% if r.credit is defined and r.credit is not none %}₹ {{ '%.2f'|format(r.credit) }}{% elif r['credit'] is not none %}₹ {{ '%.2f'|format(r['credit']) }}{% else %}-{% endif %}</td>
         <td class="td">
           {% if r.income_type is defined %}
             {% if r.income_type == 'office' %}<span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-xs">Office</span>{% elif r.income_type == 'lodge' %}<span class="px-2 py-0.5 rounded bg-cyan-100 text-cyan-800 text-xs">Lodge</span>{% endif %}
+          {% elif 'income_type' in r and r['income_type'] %}
+            {% if r['income_type'] == 'office' %}<span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-xs">Office</span>{% elif r['income_type'] == 'lodge' %}<span class="px-2 py-0.5 rounded bg-cyan-100 text-cyan-800 text-xs">Lodge</span>{% endif %}
           {% else %}-{% endif %}
         </td>
       </tr>
@@ -104,5 +127,30 @@
     </tbody>
   </table>
 </div>
+<script>
+function sortAxisTable(){
+  const by = document.getElementById('sort_by').value;
+  const dir = document.getElementById('sort_dir').value;
+  const tbody = document.querySelector('#axisTable tbody');
+  const rows = Array.from(tbody.querySelectorAll('tr'));
+  const mul = dir === 'asc' ? 1 : -1;
+  rows.sort((a,b)=>{
+    if(by === 'date'){
+      const da = (a.dataset.date||'');
+      const db = (b.dataset.date||'');
+      return (da > db ? 1 : da < db ? -1 : 0) * mul;
+    } else if(by === 'tag'){
+      const ta = (a.dataset.tag||'');
+      const tb = (b.dataset.tag||'');
+      return (ta > tb ? 1 : ta < tb ? -1 : 0) * mul;
+    } else {
+      const aa = parseFloat(a.dataset.amount||'0') || 0;
+      const ab = parseFloat(b.dataset.amount||'0') || 0;
+      return (aa > ab ? 1 : aa < ab ? -1 : 0) * mul;
+    }
+  });
+  rows.forEach(r=>tbody.appendChild(r));
+}
+</script>
 {% endif %}
 {% endblock %}
