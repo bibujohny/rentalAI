@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, flash, current_app
+from flask import Blueprint, render_template, request, flash, current_app, jsonify
 from flask_login import login_required
 import os, uuid
 from werkzeug.utils import secure_filename
@@ -222,4 +222,7 @@ def axis_to_json():
                 os.remove(path)
             except Exception:
                 pass
+    # JSON toggle
+    if request.args.get('format') == 'json':
+        return jsonify(json_rows or [])
     return render_template('pdf_axis.html', json_rows=json_rows, totals=totals)
