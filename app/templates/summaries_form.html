@@ -7,7 +7,8 @@
     <div>
       <label class="text-sm text-slate-500">Year</label>
       <select name="year" class="input" required>
-        {% for y in range(2022, 2036) %}
+        {% set ys = years if years is defined else [2022,2036] %}
+        {% for y in ys %}
         <option value="{{ y }}" {% if item and item.year==y %}selected{% endif %}>{{ y }}</option>
         {% endfor %}
       </select>

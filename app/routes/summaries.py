@@ -77,6 +77,10 @@ def list_summaries():
 @summaries_bp.route('/add', methods=['GET', 'POST'])
 @login_required
 def add_summary():
+    from datetime import date as _date
+    current_year = _date.today().year
+    allowed_years = [current_year, current_year + 1]
+
     if request.method == 'POST':
         year = int(request.form.get('year'))
         month = int(request.form.get('month'))
@@ -115,7 +119,7 @@ def add_summary():
 
     # Defaults for new item
     default_pb = {"chakravarthy": {"cash": 0.0, "upi": 0.0}, "relax_inn": {"cash": 0.0, "upi": 0.0}}
-    return render_template('summaries_form.html', item=None, pb=default_pb, free_notes="")
+    return render_template('summaries_form.html', item=None, pb=default_pb, free_notes="", years=allowed_years)
 
 
 @summaries_bp.route('/edit/<int:item_id>', methods=['GET', 'POST'])
