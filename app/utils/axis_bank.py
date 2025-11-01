@@ -55,9 +55,28 @@ def _clean_particulars(cell: str | None) -> str:
     return ' '.join(str(cell).split())
 
 
+SUMMARY_TOKENS = ("transaction total", "closing balance", "opening balance")
+
+
+def _strip_summary_tokens(text: str) -> str:
+    """Remove summary phrases (TRANSACTION TOTAL, CLOSING BALANCE, OPENING BALANCE) from particulars.
+    Keeps content before the first summary token, trims whitespace."""
+    if not text:
+        return ""
+    low = text.lower()
+    cut = len(text)
+    for tok in SUMMARY_TOKENS:
+        idx = low.find(tok)
+        if idx >= 0:
+            cut = min(cut, idx)
+    cleaned = text[:cut].strip()
+    return ' '.join(cleaned.split())
+
+
 def parse_axis_statement_from_tables(path: str, password: Optional[str] = None) -> List[Dict]:
     """Use pdfplumber to extract tables and parse Axis Bank transactions.
     Works across pages that may omit headers after page 1 by carrying forward the last-known column indexes.
+    Also cleans merged rows where summary phrases appear after the particulars by stripping them out.
     """
     if pdfplumber is None:
         return []
@@ -130,15 +149,17 @@ def parse_axis_statement_from_tables(path: str, password: Optional[str] = None) 
                                 last_row['credit'] = _parse_amount(cont_text)
                             if (' dr' in lower or 'debit' in lower) and (last_row.get('debit') is None):
                                 last_row['debit'] = _parse_amount(cont_text)
-                            last_row['particulars'] = (last_row.get('particulars','') + ' ' + _clean_particulars(raw_part)).strip()
+                            # Append cleaned particulars (strip summary tokens if merged)
+                            last_row['particulars'] = (last_row.get('particulars','') + ' ' + _strip_summary_tokens(_clean_particulars(raw_part))).strip()
                             continue
 
                         if not d_iso:
                             # Can't parse this line
                             continue
 
-                        # Skip opening balance
-                        if str(raw_part).strip().lower().startswith('opening balance'):
+                        # Skip pure summary rows
+                        low_part = str(raw_part).strip().lower()
+                        if low_part.startswith(('opening balance','transaction total','closing balance')):
                             last_row = None
                             continue
 
@@ -153,22 +174,13 @@ def parse_axis_statement_from_tables(path: str, password: Optional[str] = None) 
                             if ' dr' in lower or 'debit' in lower and credit is None:
                                 debit = _parse_amount(raw_part)
 
-                        # Clean particulars: strip trailing summary tokens if present
-                        part_clean = _clean_particulars(raw_part)
-                        for tok in ('transaction total', 'closing balance'):
-                            idx = part_clean.lower().find(tok)
-                            if idx > 0:
-                                part_clean = part_clean[:idx].strip()
-                        # If amounts were parsed from particulars due to embedded Cr/Dr, try to keep only the part before Cr/Dr
-                        split_tokens = [' CR', ' Cr', ' cr', ' CREDIT', ' Credit', ' credit', ' DR', ' Dr', ' dr', ' DEBIT', ' Debit', ' debit']
-                        for st in split_tokens:
-                            if st in part_clean:
-                                part_clean = part_clean.split(st)[0].strip()
-                                break
+                        part_clean = _strip_summary_tokens(_clean_particulars(raw_part))
+                        if not part_clean:
+                            last_row = None
+                            continue
 
                         item = {
                             'date': d_iso,
-                            'particulars': _clean_particulars(raw_part),
                             'particulars': part_clean,
                             'debit': debit,
                             'credit': credit,
