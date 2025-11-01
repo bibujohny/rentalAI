@@ -58,7 +58,7 @@
         <tbody>
           {% for f in saved_all %}
           <tr>
-            <td class="td whitespace-nowrap">{{ '%02d'|format(f.month) }}-{{ f.year }}</td>
+            <td class="td whitespace-nowrap">{{ ["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][f.month] }} {{ f.year }}</td>
             <td class="td">{{ f.name }}</td>
             <td class="td">{{ f.mtime }}</td>
             <td class="td">{{ f.size_kb }} KB</td>
