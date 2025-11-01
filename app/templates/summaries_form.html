@@ -27,16 +27,24 @@
     </div>
 
     <div>
-      <label class="text-sm text-slate-500">Chakravarthy Lodge</label>
-      <input name="lodge_chakravarthy" type="number" step="0.01" class="input" value="{{ item.lodge_chakravarthy if item else '' }}">
+      <label class="text-sm text-slate-500">Chakravarthy Cash</label>
+      <input name="chak_cash" type="number" step="0.01" class="input" value="{{ '%.2f'|format(pb.chakravarthy.cash) if pb else '' }}">
+    </div>
+    <div>
+      <label class="text-sm text-slate-500">Chakravarthy UPI</label>
+      <input name="chak_upi" type="number" step="0.01" class="input" value="{{ '%.2f'|format(pb.chakravarthy.upi) if pb else '' }}">
     </div>
     <div>
       <label class="text-sm text-slate-500">Monthly Tenants</label>
       <input name="monthly_rent_building" type="number" step="0.01" class="input" value="{{ item.monthly_rent_building if item else '' }}">
     </div>
     <div>
-      <label class="text-sm text-slate-500">Relax Inn Lodge</label>
-      <input name="lodge_relax_inn" type="number" step="0.01" class="input" value="{{ item.lodge_relax_inn if item else '' }}">
+      <label class="text-sm text-slate-500">Relax Inn Cash</label>
+      <input name="relax_cash" type="number" step="0.01" class="input" value="{{ '%.2f'|format(pb.relax_inn.cash) if pb else '' }}">
+    </div>
+    <div>
+      <label class="text-sm text-slate-500">Relax Inn UPI</label>
+      <input name="relax_upi" type="number" step="0.01" class="input" value="{{ '%.2f'|format(pb.relax_inn.upi) if pb else '' }}">
     </div>
     <div>
       <label class="text-sm text-slate-500">Misc Income</label>
@@ -44,7 +52,7 @@
     </div>
     <div class="md:col-span-3">
       <label class="text-sm text-slate-500">Notes</label>
-      <input name="notes" class="input" value="{{ item.notes if item else '' }}">
+      <input name="notes" class="input" value="{{ free_notes if free_notes is defined else (item.notes if item else '') }}">
     </div>
     <div class="md:col-span-3">
       <label class="text-sm text-slate-500">Grand Total</label>
@@ -65,9 +73,9 @@ function valOr0(name) {
 }
 function updateTotal() {
   const total =
-    valOr0('lodge_chakravarthy') +
+    (valOr0('chak_cash') + valOr0('chak_upi')) +
     valOr0('monthly_rent_building') +
-    valOr0('lodge_relax_inn') +
+    (valOr0('relax_cash') + valOr0('relax_upi')) +
     valOr0('misc_income');
   const out = document.getElementById('total_income');
   if (out) out.value = total.toFixed(2);

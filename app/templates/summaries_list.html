@@ -24,9 +24,11 @@
     <thead>
       <tr>
         <th class="th">Month</th>
-        <th class="th">Chakravarthy</th>
+        <th class="th">Chakravarthy Cash</th>
+        <th class="th">Chakravarthy UPI</th>
         <th class="th">Monthly Tenants</th>
-        <th class="th">Relax Inn</th>
+        <th class="th">Relax Inn Cash</th>
+        <th class="th">Relax Inn UPI</th>
         <th class="th">Misc</th>
         <th class="th">Total</th>
         <th class="th">Period</th>
@@ -37,9 +39,11 @@
       {% for r in rows %}
       <tr>
         <td class="td font-semibold">{{ "%02d"|format(r.month) }}</td>
-        <td class="td">₹ {{ '%.2f'|format(r.lodge_chakravarthy or 0) }}</td>
+        <td class="td">₹ {{ '%.2f'|format(r.pb_chak_cash or 0) }}</td>
+        <td class="td">₹ {{ '%.2f'|format(r.pb_chak_upi or 0) }}</td>
         <td class="td">₹ {{ '%.2f'|format(r.monthly_rent_building or 0) }}</td>
-        <td class="td">₹ {{ '%.2f'|format(r.lodge_relax_inn or 0) }}</td>
+        <td class="td">₹ {{ '%.2f'|format(r.pb_rel_cash or 0) }}</td>
+        <td class="td">₹ {{ '%.2f'|format(r.pb_rel_upi or 0) }}</td>
         <td class="td">₹ {{ '%.2f'|format(r.misc_income or 0) }}</td>
         <td class="td font-semibold">₹ {{ '%.2f'|format(r.total_income or 0) }}</td>
         <td class="td text-sm">{{ r.period_start }} — {{ r.period_end }}</td>

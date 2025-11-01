@@ -3,8 +3,46 @@ from flask_login import login_required
 from datetime import date
 from ..models import db
 from ..models_monthly import MonthlySummary
+import json
+import re
 
 summaries_bp = Blueprint('summaries', __name__, url_prefix='/summaries')
+
+PB_START = "[[PB:"
+PB_END = "]]"
+
+def _parse_breakdown(notes: str | None):
+    """Extract payment breakdown from notes.
+    Format: [[PB:{"chakravarthy":{"cash":0,"upi":0},"relax_inn":{"cash":0,"upi":0}}]] optional free text after.
+    Returns (breakdown_dict, free_text)
+    """
+    default = {"chakravarthy": {"cash": 0.0, "upi": 0.0}, "relax_inn": {"cash": 0.0, "upi": 0.0}}
+    if not notes:
+        return default, ""
+    s = notes.strip()
+    m = re.search(re.escape(PB_START) + r"(.*?)" + re.escape(PB_END), s)
+    if not m:
+        return default, s
+    try:
+        data = json.loads(m.group(1))
+        # free text is notes with the PB block removed
+        free = (s[:m.start()] + s[m.end():]).strip()
+        # coerce
+        for lod in ("chakravarthy", "relax_inn"):
+            if lod not in data or not isinstance(data[lod], dict):
+                data[lod] = {"cash": 0.0, "upi": 0.0}
+            else:
+                data[lod]["cash"] = float(data[lod].get("cash") or 0.0)
+                data[lod]["upi"] = float(data[lod].get("upi") or 0.0)
+        return data, free
+    except Exception:
+        return default, s
+
+
+def _embed_breakdown(breakdown: dict, free_text: str | None) -> str:
+    pb = PB_START + json.dumps(breakdown, separators=(",", ":")) + PB_END
+    txt = (free_text or "").strip()
+    return pb + (" " + txt if txt else "")
 
 
 def month_name(m):
@@ -20,6 +58,14 @@ def list_summaries():
         years = sorted(set(years + [year]), reverse=True)
     rows = (MonthlySummary.query.filter(MonthlySummary.year == year)
             .order_by(MonthlySummary.month.asc()).all())
+
+    # Attach breakdown fields for display
+    for r in rows:
+        pb, _ = _parse_breakdown(r.notes)
+        r.pb_chak_cash = pb["chakravarthy"]["cash"]
+        r.pb_chak_upi = pb["chakravarthy"]["upi"]
+        r.pb_rel_cash = pb["relax_inn"]["cash"]
+        r.pb_rel_upi = pb["relax_inn"]["upi"]
 
     chart_labels = [f"{month_name(r.month)}" for r in rows]
     chart_values = [r.total_income or 0 for r in rows]
@@ -38,13 +84,27 @@ def add_summary():
             flash('A summary for this month already exists.', 'warning')
             return redirect(url_for('summaries.list_summaries', year=year))
 
+        # Payment breakdown inputs
+        pb = {
+            "chakravarthy": {
+                "cash": float(request.form.get('chak_cash') or 0),
+                "upi": float(request.form.get('chak_upi') or 0),
+            },
+            "relax_inn": {
+                "cash": float(request.form.get('relax_cash') or 0),
+                "upi": float(request.form.get('relax_upi') or 0),
+            },
+        }
+        free_notes = request.form.get('notes') or None
+        notes = _embed_breakdown(pb, free_notes)
+
         ms = MonthlySummary(
             year=year, month=month,
-            lodge_chakravarthy=float(request.form.get('lodge_chakravarthy') or 0),
+            lodge_chakravarthy=round(pb["chakravarthy"]["cash"] + pb["chakravarthy"]["upi"], 2),
             monthly_rent_building=float(request.form.get('monthly_rent_building') or 0),
-            lodge_relax_inn=float(request.form.get('lodge_relax_inn') or 0),
+            lodge_relax_inn=round(pb["relax_inn"]["cash"] + pb["relax_inn"]["upi"], 2),
             misc_income=float(request.form.get('misc_income') or 0),
-            notes=request.form.get('notes') or None,
+            notes=notes,
         )
         ms.ensure_period_defaults()
         ms.compute_total()
@@ -53,7 +113,9 @@ def add_summary():
         flash('Summary added.', 'success')
         return redirect(url_for('summaries.list_summaries', year=year))
 
-    return render_template('summaries_form.html', item=None)
+    # Defaults for new item
+    default_pb = {"chakravarthy": {"cash": 0.0, "upi": 0.0}, "relax_inn": {"cash": 0.0, "upi": 0.0}}
+    return render_template('summaries_form.html', item=None, pb=default_pb, free_notes="")
 
 
 @summaries_bp.route('/edit/<int:item_id>', methods=['GET', 'POST'])
@@ -68,20 +130,36 @@ def edit_summary(item_id):
             flash('A summary for this month already exists.', 'warning')
             return redirect(url_for('summaries.edit_summary', item_id=ms.id))
 
+        # Read payment breakdown and recompute per-lodge totals
+        pb = {
+            "chakravarthy": {
+                "cash": float(request.form.get('chak_cash') or 0),
+                "upi": float(request.form.get('chak_upi') or 0),
+            },
+            "relax_inn": {
+                "cash": float(request.form.get('relax_cash') or 0),
+                "upi": float(request.form.get('relax_upi') or 0),
+            },
+        }
+        free_notes = request.form.get('notes') or None
+        notes = _embed_breakdown(pb, free_notes)
+
         ms.year = new_year
         ms.month = new_month
-        ms.lodge_chakravarthy = float(request.form.get('lodge_chakravarthy') or 0)
+        ms.lodge_chakravarthy = round(pb["chakravarthy"]["cash"] + pb["chakravarthy"]["upi"], 2)
         ms.monthly_rent_building = float(request.form.get('monthly_rent_building') or 0)
-        ms.lodge_relax_inn = float(request.form.get('lodge_relax_inn') or 0)
+        ms.lodge_relax_inn = round(pb["relax_inn"]["cash"] + pb["relax_inn"]["upi"], 2)
         ms.misc_income = float(request.form.get('misc_income') or 0)
-        ms.notes = request.form.get('notes') or None
+        ms.notes = notes
         ms.ensure_period_defaults()
         ms.compute_total()
         db.session.commit()
         flash('Summary updated.', 'success')
         return redirect(url_for('summaries.list_summaries', year=ms.year))
 
-    return render_template('summaries_form.html', item=ms)
+    # Pre-fill with existing breakdown and free text notes
+    pb, free = _parse_breakdown(ms.notes)
+    return render_template('summaries_form.html', item=ms, pb=pb, free_notes=free)
 
 
 @summaries_bp.route('/delete/<int:item_id>', methods=['POST'])
