@@ -2,7 +2,7 @@
 {% block content %}
 <h1 class="text-2xl font-bold mb-4">Axis Bank Statement → JSON</h1>
 <div class="card mb-4">
-  <form id="axisForm" method="post" enctype="multipart/form-data" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+  <form id="axisForm" method="post" enctype="multipart/form-data" class="grid grid-cols-1 md:grid-cols-6 gap-3">
     <div class="md:col-span-2">
       <label class="text-sm text-slate-500">PDF File</label>
       <input type="file" name="file" accept="application/pdf" class="input" required>
@@ -11,8 +11,32 @@
       <label class="text-sm text-slate-500">Password (optional)</label>
       <input type="password" name="password" class="input" placeholder="Leave blank to use default">
     </div>
-    <div class="flex items-end gap-2 md:col-span-2">
-      <button class="btn" type="submit">Upload & Extract</button>
+    <div class="md:col-span-3 grid grid-cols-3 gap-2 items-end">
+      <div class="col-span-3 flex items-center gap-2 mt-2">
+        <input id="save_pdf" name="save_pdf" type="checkbox" class="h-4 w-4">
+        <label for="save_pdf" class="text-sm text-slate-700">Save a copy on server</label>
+      </div>
+      <div>
+        <label class="text-sm text-slate-500">Month</label>
+        <select name="save_month" class="input">
+          {% for m in range(1,13) %}
+            <option value="{{ m }}" {% if cur_month and cur_month==m %}selected{% endif %}>{{ "%02d"|format(m) }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="text-sm text-slate-500">Year</label>
+        <select name="save_year" class="input">
+          {% for y in years %}
+            <option value="{{ y }}" {% if cur_year and cur_year==y %}selected{% endif %}>{{ y }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex items-end">
+        <button class="btn" type="submit">Upload & Extract</button>
+      </div>
+    </div>
+    <div class="flex items-end gap-2 md:col-span-1">
       <button class="btn-outline" type="button" onclick="submitJson()">View JSON</button>
     </div>
   </form>

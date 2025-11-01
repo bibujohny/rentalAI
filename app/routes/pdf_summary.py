@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, request, flash, current_app, jsonify
 from flask_login import login_required
-import os, uuid
+import os, uuid, shutil
+from datetime import date
 from werkzeug.utils import secure_filename
 from ..utils.pdf_summary import extract_text_from_pdf, summarize_month
 from ..utils.axis_bank import parse_axis_pdf
@@ -164,33 +165,61 @@ def save_monthly():
 @pdf_bp.route('/axis', methods=['GET', 'POST'])
 @login_required
 def axis_to_json():
-    """Upload an Axis Bank statement PDF and return structured table of transactions with totals."""
+    """Upload an Axis Bank statement PDF and return structured table of transactions with totals.
+    Optional: save a copy of the uploaded PDF to the server, with selected month/year.
+    """
     json_rows = None
     totals = None
+    cur_year = date.today().year
+    cur_month = date.today().month
+    years = list(range(2022, 2036))
+
     if request.method == 'POST':
         f = request.files.get('file')
         password = request.form.get('password') or (current_app.config.get('PDF_DEFAULT_PASSWORD') or None)
+        save_pdf = True if request.form.get('save_pdf') else False
+        save_year = request.form.get('save_year', type=int) or cur_year
+        save_month = request.form.get('save_month', type=int) or cur_month
+
         if not f or f.filename == '':
             flash('Please choose a PDF file.', 'warning')
-            return render_template('pdf_axis.html', json_rows=None)
+            return render_template('pdf_axis.html', json_rows=None, totals=None, years=years, cur_year=cur_year, cur_month=cur_month)
         if not allowed_file(f.filename):
             flash('Only PDF files are allowed.', 'warning')
-            return render_template('pdf_axis.html', json_rows=None)
+            return render_template('pdf_axis.html', json_rows=None, totals=None, years=years, cur_year=cur_year, cur_month=cur_month)
         f.seek(0, os.SEEK_END)
         size_mb = f.tell() / (1024 * 1024)
         f.seek(0)
         if size_mb > MAX_SIZE_MB:
             flash(f'File too large: {size_mb:.1f} MB (max {MAX_SIZE_MB} MB).', 'warning')
-            return render_template('pdf_axis.html', json_rows=None)
+            return render_template('pdf_axis.html', json_rows=None, totals=None, years=years, cur_year=cur_year, cur_month=cur_month)
         try:
             updir = upload_dir()
             unique_name = f"{uuid.uuid4().hex}_{secure_filename(f.filename)}"
-            path = os.path.join(updir, unique_name)
-            f.save(path)
+            tmp_path = os.path.join(updir, unique_name)
+            f.save(tmp_path)
+
+            # Optionally move to a permanent location based on selected month/year
+            saved_path = None
+            if save_pdf:
+                # Validate ranges
+                if save_year not in years or save_month < 1 or save_month > 12:
+                    flash('Provide a valid year and month for saving the PDF.', 'warning')
+                else:
+                    axis_dir = os.path.join(updir, 'axis_saved', str(save_year), f"{save_year}-{save_month:02d}")
+                    os.makedirs(axis_dir, exist_ok=True)
+                    base, ext = os.path.splitext(secure_filename(f.filename))
+                    safe_base = base or 'statement'
+                    final_name = f"axis_{save_year}-{save_month:02d}_{safe_base}_{uuid.uuid4().hex[:6]}{ext or '.pdf'}"
+                    saved_path = os.path.join(axis_dir, final_name)
+                    shutil.move(tmp_path, saved_path)
+                    flash(f'Saved PDF on server as {final_name}', 'success')
+            # Use whichever path exists for parsing
+            path = saved_path or tmp_path
         except Exception as e:
             current_app.logger.exception("Upload save failed (axis)")
             flash(f'Upload failed: {e}', 'danger')
-            return render_template('pdf_axis.html', json_rows=None)
+            return render_template('pdf_axis.html', json_rows=None, totals=None, years=years, cur_year=cur_year, cur_month=cur_month)
         try:
             current_app.logger.info(f"Axis parse started file={path}, password_used={bool(password)}")
             rows = parse_axis_pdf(path, password=password)
@@ -247,11 +276,13 @@ def axis_to_json():
             current_app.logger.exception("Axis PDF parsing failed")
             flash(f'Error parsing Axis statement: {e}', 'danger')
         finally:
+            # Remove temp file if we didn't save/move it
             try:
-                os.remove(path)
+                if not (save_pdf and os.path.exists(path)) and os.path.exists(tmp_path):
+                    os.remove(tmp_path)
             except Exception:
                 pass
     # JSON toggle
     if request.args.get('format') == 'json':
         return jsonify(json_rows or [])
-    return render_template('pdf_axis.html', json_rows=json_rows, totals=totals)
+    return render_template('pdf_axis.html', json_rows=json_rows, totals=totals, years=years, cur_year=cur_year, cur_month=cur_month)
