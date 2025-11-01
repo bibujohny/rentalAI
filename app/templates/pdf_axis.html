@@ -47,7 +47,7 @@
     <tbody>
       {% for r in json_rows %}
       <tr>
-        <td class="td whitespace-nowrap">{{ r.date if r.date is defined else r['date'] }}</td>
+        <td class="td whitespace-nowrap">{% set d = (r.date if r.date is defined else r['date']) %}{% if d %}{% set p = d.split('-') %}{{ p[2] }}-{{ p[1] }}-{{ p[0] }}{% else %}-{% endif %}</td>
         <td class="td">{{ r.particulars if r.particulars is defined else r['particulars'] }}</td>
         <td class="td text-right">{% if r.debit is defined and r.debit is not none %}₹ {{ '%.2f'|format(r.debit) }}{% elif r['debit'] is not none %}₹ {{ '%.2f'|format(r['debit']) }}{% else %}-{% endif %}</td>
         <td class="td text-right">{% if r.credit is defined and r.credit is not none %}₹ {{ '%.2f'|format(r.credit) }}{% elif r['credit'] is not none %}₹ {{ '%.2f'|format(r['credit']) }}{% else %}-{% endif %}</td>

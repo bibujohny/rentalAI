@@ -153,9 +153,23 @@ def parse_axis_statement_from_tables(path: str, password: Optional[str] = None) 
                             if ' dr' in lower or 'debit' in lower and credit is None:
                                 debit = _parse_amount(raw_part)
 
+                        # Clean particulars: strip trailing summary tokens if present
+                        part_clean = _clean_particulars(raw_part)
+                        for tok in ('transaction total', 'closing balance'):
+                            idx = part_clean.lower().find(tok)
+                            if idx > 0:
+                                part_clean = part_clean[:idx].strip()
+                        # If amounts were parsed from particulars due to embedded Cr/Dr, try to keep only the part before Cr/Dr
+                        split_tokens = [' CR', ' Cr', ' cr', ' CREDIT', ' Credit', ' credit', ' DR', ' Dr', ' dr', ' DEBIT', ' Debit', ' debit']
+                        for st in split_tokens:
+                            if st in part_clean:
+                                part_clean = part_clean.split(st)[0].strip()
+                                break
+
                         item = {
                             'date': d_iso,
                             'particulars': _clean_particulars(raw_part),
+                            'particulars': part_clean,
                             'debit': debit,
                             'credit': credit,
                         }
