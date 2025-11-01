@@ -38,7 +38,7 @@
     <tbody>
       {% for r in rows %}
       <tr>
-        <td class="td font-semibold">{{ "%02d"|format(r.month) }}</td>
+        <td class="td font-semibold">{{ r.display_month if r.display_month is defined else ("%02d"|format(r.month)) }}</td>
         <td class="td">₹ {{ '%.2f'|format(r.pb_chak_cash or 0) }}</td>
         <td class="td">₹ {{ '%.2f'|format(r.pb_chak_upi or 0) }}</td>
         <td class="td">₹ {{ '%.2f'|format(r.monthly_rent_building or 0) }}</td>

@@ -66,13 +66,13 @@ def list_summaries():
         r.pb_chak_upi = pb["chakravarthy"]["upi"]
         r.pb_rel_cash = pb["relax_inn"]["cash"]
         r.pb_rel_upi = pb["relax_inn"]["upi"]
+        r.display_month = f"{month_name(r.month)} {r.year}"
 
     chart_labels = [f"{month_name(r.month)}" for r in rows]
     chart_values = [r.total_income or 0 for r in rows]
 
     return render_template('summaries_list.html', rows=rows, years=years, selected_year=year,
                            chart_labels=chart_labels, chart_values=chart_values)
-
 
 @summaries_bp.route('/add', methods=['GET', 'POST'])
 @login_required
