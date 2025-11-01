@@ -94,19 +94,19 @@
 <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
   <div class="p-4 rounded bg-teal-50 dark:bg-slate-700/50">
     <div class="text-sm text-slate-500">Total Income (Cr)</div>
-    <div class="text-3xl font-bold">₹ {{ '%.2f'|format(totals.income_total if totals else 0) }}</div>
+    <div class="text-3xl font-bold">₹ {{ (totals.income_total if totals else 0)|fmt_money }}</div>
   </div>
   <div class="p-4 rounded bg-emerald-50 dark:bg-slate-700/50">
     <div class="text-sm text-slate-500">Office Rental Income</div>
-    <div class="text-3xl font-bold">₹ {{ '%.2f'|format(totals.office_income_total if totals and totals.office_income_total is defined else 0) }}</div>
+    <div class="text-3xl font-bold">₹ {{ (totals.office_income_total if totals and totals.office_income_total is defined else 0)|fmt_money }}</div>
   </div>
   <div class="p-4 rounded bg-cyan-50 dark:bg-slate-700/50">
     <div class="text-sm text-slate-500">Lodge Income</div>
-    <div class="text-3xl font-bold">₹ {{ '%.2f'|format(totals.lodge_income_total if totals and totals.lodge_income_total is defined else 0) }}</div>
+    <div class="text-3xl font-bold">₹ {{ (totals.lodge_income_total if totals and totals.lodge_income_total is defined else 0)|fmt_money }}</div>
   </div>
   <div class="p-4 rounded bg-blue-50 dark:bg-slate-700/50">
     <div class="text-sm text-slate-500">Net</div>
-    <div class="text-3xl font-bold">₹ {{ '%.2f'|format(totals.net if totals else 0) }}</div>
+    <div class="text-3xl font-bold">₹ {{ (totals.net if totals else 0)|fmt_money }}</div>
   </div>
 </div>
 

@@ -28,6 +28,17 @@ def create_app(config_name: str = "default"):
     def load_user(user_id):
         return User.query.get(int(user_id))
 
+    # Template filters
+    @app.template_filter('fmt_money')
+    def fmt_money(value):
+        try:
+            return f"{float(value):,.2f}"
+        except Exception:
+            try:
+                return f"{float(0 if value is None else value):,.2f}"
+            except Exception:
+                return "0.00"
+
     # Blueprints
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
