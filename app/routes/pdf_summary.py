@@ -174,6 +174,7 @@ def axis_to_json():
     cur_month = date.today().month
     years = list(range(2022, 2036))
     saved_files = None
+    saved_all = None
     loaded_file = None
 
     def saved_data_dir(y: int, m: int) -> str:
@@ -346,4 +347,45 @@ def axis_to_json():
     # JSON toggle
     if request.args.get('format') == 'json':
         return jsonify(json_rows or [])
-    return render_template('pdf_axis.html', json_rows=json_rows, totals=totals, years=years, cur_year=cur_year, cur_month=cur_month, saved_files=saved_files, loaded_file=loaded_file, view_year=view_year, view_month=view_month)
+
+    # Build flat list of all saved JSON across months for quick access
+    try:
+        base = os.path.join(upload_dir(), 'axis_data')
+        if os.path.isdir(base):
+            all_items = []
+            for yname in sorted(os.listdir(base), reverse=True):
+                ypath = os.path.join(base, yname)
+                if not os.path.isdir(ypath):
+                    continue
+                for mname in sorted(os.listdir(ypath), reverse=True):
+                    mpath = os.path.join(ypath, mname)
+                    if not os.path.isdir(mpath):
+                        continue
+                    # Expect mname like YYYY-MM
+                    try:
+                        parts = mname.split('-')
+                        yy = int(parts[0]); mm = int(parts[1])
+                    except Exception:
+                        continue
+                    for fname in sorted(os.listdir(mpath)):
+                        if not fname.endswith('.json'):
+                            continue
+                        fpath = os.path.join(mpath, fname)
+                        try:
+                            st = os.stat(fpath)
+                            all_items.append({
+                                'year': yy,
+                                'month': mm,
+                                'name': fname,
+                                'mtime': datetime.fromtimestamp(st.st_mtime).strftime('%Y-%m-%d %H:%M'),
+                                'size_kb': round(st.st_size / 1024, 1),
+                            })
+                        except Exception:
+                            continue
+            # Sort by mtime desc
+            saved_all = sorted(all_items, key=lambda x: (x['year'], x['month'], x['mtime']), reverse=True)
+    except Exception:
+        current_app.logger.exception('Failed to list all saved axis JSONs')
+        saved_all = None
+
+    return render_template('pdf_axis.html', json_rows=json_rows, totals=totals, years=years, cur_year=cur_year, cur_month=cur_month, saved_files=saved_files, saved_all=saved_all, loaded_file=loaded_file, view_year=view_year, view_month=view_month)
