@@ -109,6 +109,38 @@
   </div>
 </div>
 
+{% if ytd_totals %}
+<div class="card mb-4">
+  <h3 class="font-semibold mb-2">Year-to-date totals</h3>
+  <div class="overflow-auto">
+    <table class="table">
+      <thead>
+        <tr>
+          <th class="th">Year</th>
+          <th class="th text-right">Total Credits</th>
+          <th class="th text-right">Total Debits</th>
+          <th class="th text-right">Net</th>
+          <th class="th text-right">Credit Entries</th>
+          <th class="th text-right">Debit Entries</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in ytd_totals %}
+        <tr>
+          <td class="td">{{ item.year }}</td>
+          <td class="td text-right">₹ {{ item.income_total|fmt_money }}</td>
+          <td class="td text-right">₹ {{ item.expense_total|fmt_money }}</td>
+          <td class="td text-right">₹ {{ item.net|fmt_money }}</td>
+          <td class="td text-right">{{ item.income_entries }}</td>
+          <td class="td text-right">{{ item.expense_entries }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 <div class="card overflow-auto">
   <div class="flex items-center justify-between mb-2">
     <div class="text-sm text-slate-500">Extracted {{ json_rows|length }} transactions</div>

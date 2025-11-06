@@ -28,6 +28,48 @@ def upload_dir() -> str:
     return path
 
 
+def _year_to_date_totals(rows):
+    year_map = {}
+    for r in rows or []:
+        date_str = r.get('date')
+        if not date_str:
+            continue
+        try:
+            year = int(str(date_str).split('-')[0])
+        except Exception:
+            continue
+        info = year_map.setdefault(year, {
+            'income_total': 0.0,
+            'expense_total': 0.0,
+            'net': 0.0,
+            'income_entries': 0,
+            'expense_entries': 0,
+        })
+        credit = r.get('credit') or 0.0
+        debit = r.get('debit') or 0.0
+        try:
+            credit = float(credit)
+        except Exception:
+            credit = 0.0
+        try:
+            debit = float(debit)
+        except Exception:
+            debit = 0.0
+        info['income_total'] += credit
+        info['expense_total'] += debit
+        info['net'] = info['income_total'] - info['expense_total']
+        if credit:
+            info['income_entries'] += 1
+        if debit:
+            info['expense_entries'] += 1
+    # sort years desc
+    return sorted(
+        [{'year': year, **vals} for year, vals in year_map.items()],
+        key=lambda x: x['year'],
+        reverse=True,
+    )
+
+
 @pdf_bp.route('/summary', methods=['GET', 'POST'])
 @login_required
 def summary():
@@ -171,6 +213,8 @@ def axis_to_json():
     """
     json_rows = None
     totals = None
+    ytd_totals = None
+    ytd_totals = None
     cur_year = date.today().year
     cur_month = date.today().month
     years = list(range(2022, 2036))
@@ -398,6 +442,7 @@ def hdfc_to_json():
     """Upload an HDFC Bank statement PDF and return structured transaction data."""
     json_rows = None
     totals = None
+    ytd_totals = None
     cur_year = date.today().year
     cur_month = date.today().month
     years = list(range(2022, 2036))
@@ -472,6 +517,7 @@ def hdfc_to_json():
                     'office_income_total': office_income_total,
                     'lodge_income_total': lodge_income_total,
                 }
+                ytd_totals = _year_to_date_totals(rows)
                 flash(f"Loaded saved data for {view_year}-{view_month:02d}", 'info')
             else:
                 flash('No saved data found for the selected month.', 'warning')
@@ -494,6 +540,7 @@ def hdfc_to_json():
                 'pdf_hdfc.html',
                 json_rows=json_rows,
                 totals=totals,
+                ytd_totals=ytd_totals,
                 years=years,
                 cur_year=cur_year,
                 cur_month=cur_month,
@@ -504,6 +551,7 @@ def hdfc_to_json():
                 'pdf_hdfc.html',
                 json_rows=json_rows,
                 totals=totals,
+                ytd_totals=ytd_totals,
                 years=years,
                 cur_year=cur_year,
                 cur_month=cur_month,
@@ -520,6 +568,7 @@ def hdfc_to_json():
                 'pdf_hdfc.html',
                 json_rows=json_rows,
                 totals=totals,
+                ytd_totals=ytd_totals,
                 years=years,
                 cur_year=cur_year,
                 cur_month=cur_month,
@@ -536,6 +585,7 @@ def hdfc_to_json():
                 'pdf_hdfc.html',
                 json_rows=json_rows,
                 totals=totals,
+                ytd_totals=ytd_totals,
                 years=years,
                 cur_year=cur_year,
                 cur_month=cur_month,
@@ -591,6 +641,7 @@ def hdfc_to_json():
                     'office_income_total': round(office_income_total, 2),
                     'lodge_income_total': round(lodge_income_total, 2),
                 }
+                ytd_totals = _year_to_date_totals(rows)
                 if save_json and (save_year in years) and (1 <= save_month <= 12):
                     try:
                         sdir = saved_data_dir(save_year, save_month)
@@ -675,6 +726,7 @@ def hdfc_to_json():
         'pdf_hdfc.html',
         json_rows=json_rows,
         totals=totals,
+        ytd_totals=ytd_totals,
         years=years,
         cur_year=cur_year,
         cur_month=cur_month,
