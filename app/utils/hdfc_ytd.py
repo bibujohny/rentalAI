@@ -25,7 +25,9 @@ SUMMARY_LINE_KEYWORDS = (
     "account type",
     "page no",
     "statementofaccount",
+    "pageno",
     "address :",
+    "address",
     "city :",
     "state :",
     "phone no",
@@ -39,6 +41,10 @@ SUMMARY_LINE_KEYWORDS = (
     "branch code",
     "nomination",
     "joint holders",
+    "mr bibu",
+    "tower 2 id",
+    "link rd",
+    "ernakulam",
 )
 
 
@@ -95,48 +101,60 @@ def parse_hdfc_ytd(path: str, password: Optional[str] = None) -> List[Dict]:
     try:
         logger.debug("Opening HDFC PDF path=%s", path)
         with pdfplumber.open(path, password=password) as pdf:
+            current_entry = None
             for page_number, page in enumerate(pdf.pages):
-                tables = page.extract_tables(table_settings=table_settings) or []
-                logger.debug("Page %s extracted %s tables", page_number, len(tables))
-                for tbl in tables:
-                    if not tbl or len(tbl[0]) < 6:
-                        logger.debug("Skipping table with insufficient columns on page %s", page_number)
+                text = page.extract_text() or ""
+                logger.debug("Page %s extracted text length=%s", page_number, len(text))
+                for raw_line in text.splitlines():
+                    line = raw_line.strip()
+                    if not line:
                         continue
-                    data_rows = tbl[1:] if "date" in (str(tbl[0][0]).lower()) else tbl
-                    for raw in data_rows:
-                        padded = list(raw) + [""] * (7 - len(raw))
-                        date_vals = [s.strip() for s in str(padded[0] or "").splitlines() if s.strip()]
-                        narration_vals = [s.strip() for s in str(padded[1] or "").splitlines() if s.strip()]
-                        withdrawal_vals = [s.strip() for s in str(padded[4] or "").splitlines() if s.strip()]
-                        deposit_vals = [s.strip() for s in str(padded[5] or "").splitlines() if s.strip()]
+                    match = re.match(r'^(\d{2}/\d{2}/\d{2})\s+(.*)$', line)
+                    if match:
+                        if current_entry:
+                            rows.append(current_entry)
+                        date_str_iso = _parse_date(match.group(1), last_date)
+                        last_date = date_str_iso or last_date
+                        rest = match.group(2).strip()
+                        rest_lower = rest.lower()
+                        if any(kw in rest_lower for kw in SUMMARY_LINE_KEYWORDS):
+                            current_entry = None
+                            continue
 
-                        max_len = max(len(date_vals), len(narration_vals), len(withdrawal_vals), len(deposit_vals), 1)
-                        for idx in range(max_len):
-                            date_cell = date_vals[idx] if idx < len(date_vals) else ""
-                            narration_cell = narration_vals[idx] if idx < len(narration_vals) else ""
-                            withdrawal_cell = withdrawal_vals[idx] if idx < len(withdrawal_vals) else ""
-                            deposit_cell = deposit_vals[idx] if idx < len(deposit_vals) else ""
+                        closing_match = re.search(r'(\d{1,3}(?:,\d{3})*(?:\.\d{2}))\s*$', rest)
+                        if closing_match:
+                            rest = rest[:closing_match.start()].rstrip()
 
-                            narration_lower = narration_cell.lower()
-                            if any(tok in narration_lower for tok in SUMMARY_LINE_KEYWORDS):
-                                continue
+                        rest = re.sub(r'\s\d{6,}\b', ' ', rest)
+                        rest = re.sub(r'\b\d{2}/\d{2}/\d{2}\b', ' ', rest, count=1)
 
-                            current_date = _parse_date(date_cell, last_date)
-                            if not current_date:
-                                continue
-                            last_date = current_date
+                        numbers = re.findall(r'\d{1,3}(?:,\d{3})*(?:\.\d{2})', rest)
+                        withdrawal_amt = deposit_amt = 0.0
+                        if len(numbers) == 1:
+                            withdrawal_amt = _parse_float(numbers[0])
+                        elif len(numbers) >= 2:
+                            withdrawal_amt = _parse_float(numbers[-2])
+                            deposit_amt = _parse_float(numbers[-1])
 
-                            withdrawal_amt = round(_parse_float(withdrawal_cell), 2)
-                            deposit_amt = round(_parse_float(deposit_cell), 2)
+                        narration = re.sub(r'\d{1,3}(?:,\d{3})*(?:\.\d{2})', ' ', rest)
+                        narration = " ".join(narration.split())
 
-                            rows.append(
-                                {
-                                    "date": current_date,
-                                    "narration": narration_cell,
-                                    "withdrawal": withdrawal_amt,
-                                    "deposit": deposit_amt,
-                                }
-                            )
+                        current_entry = {
+                            "date": date_str_iso,
+                            "narration": narration,
+                            "withdrawal": round(withdrawal_amt, 2),
+                            "deposit": round(deposit_amt, 2),
+                        }
+                    else:
+                        lower_line = line.lower()
+                        if any(kw in lower_line for kw in SUMMARY_LINE_KEYWORDS):
+                            continue
+                        if current_entry:
+                            current_entry["narration"] = (
+                                current_entry["narration"] + " " + line
+                            ).strip()
+            if current_entry:
+                rows.append(current_entry)
     except Exception as exc:
         logger.exception("Failed to parse HDFC PDF path=%s error=%s", path, exc)
         return rows
