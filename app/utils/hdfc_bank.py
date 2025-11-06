@@ -73,6 +73,7 @@ def parse_hdfc_tables(path: str, password: Optional[str] = None) -> List[Dict]:
     out: List[Dict] = []
     last_row: Optional[Dict] = None
     current_date: Optional[str] = None
+    pending_credits: List[float] = []
 
     table_settings = {
         "vertical_strategy": "lines",
@@ -82,79 +83,121 @@ def parse_hdfc_tables(path: str, password: Optional[str] = None) -> List[Dict]:
         "intersection_y_tolerance": 3,
     }
 
+    def is_header_row(row: List[str]) -> bool:
+        cell0 = (row[0] or '').strip().lower()
+        cell1 = (row[1] or '').strip().lower()
+        return 'date' in cell0 and ('narration' in cell1 or 'details' in cell1)
+
     try:
         with pdfplumber.open(path, password=password) as pdf:
             for page in pdf.pages:
                 tables = page.extract_tables(table_settings=table_settings) or []
                 for tbl in tables:
-                    if not tbl or len(tbl) < 2:
-                        continue
-                    # identify header row
-                    header_row = None
-                    data_start_idx = 0
-                    for i, row in enumerate(tbl[:4]):
-                        cell0 = (row[0] or '').strip().lower()
-                        cell1 = (row[1] or '').strip().lower()
-                        if 'date' in cell0 and ('narration' in cell1 or 'details' in cell1):
-                            header_row = row
-                            data_start_idx = i + 1
-                            break
-                    if header_row is None:
-                        # if we can't locate headers, skip to next table
+                    if not tbl:
                         continue
 
-                    for raw_row in tbl[data_start_idx:]:
-                        cells = [c.strip() if isinstance(c, str) else '' for c in raw_row]
+                    for raw_row in tbl:
+                        if is_header_row(raw_row):
+                            continue
+
+                        cells = [c if isinstance(c, str) else '' for c in raw_row]
                         if len(cells) < 2:
                             continue
-                        date_cell = cells[0]
-                        narration_cell = cells[1]
-                        withdraw_cell = cells[4] if len(cells) > 4 else ''
-                        deposit_cell = cells[5] if len(cells) > 5 else ''
+                        date_entries = cells[0].split('\n')
+                        narration_entries = cells[1].split('\n')
+                        withdraw_entries = (
+                            cells[4].split('\n')
+                            if len(cells) > 4 and cells[4] is not None
+                            else []
+                        )
+                        deposit_entries = (
+                            cells[5].split('\n')
+                            if len(cells) > 5 and cells[5] is not None
+                            else []
+                        )
 
-                        if date_cell:
-                            parsed_date = _parse_date(date_cell)
-                            if parsed_date:
-                                current_date = parsed_date
-                        if not current_date and not narration_cell:
+                        max_len = max(len(date_entries), len(narration_entries))
+                        if withdraw_entries:
+                            max_len = max(max_len, len(withdraw_entries))
+                        if deposit_entries:
+                            max_len = max(max_len, len(deposit_entries))
+                        if max_len == 0:
                             continue
 
-                        narration = _clean_text(narration_cell)
-                        if narration and any(
-                            narration.lower().startswith(prefix) for prefix in SUMMARY_PREFIXES
-                        ):
-                            last_row = None
-                            continue
+                        for idx in range(max_len):
+                            date_cell = date_entries[idx] if idx < len(date_entries) else ''
+                            narration_cell = (
+                                narration_entries[idx]
+                                if idx < len(narration_entries)
+                                else ''
+                            )
+                            withdraw_cell = (
+                                withdraw_entries[idx]
+                                if idx < len(withdraw_entries)
+                                else ''
+                            )
+                            deposit_cell = (
+                                deposit_entries[idx]
+                                if idx < len(deposit_entries)
+                                else ''
+                            )
 
-                        debit = _parse_amount(withdraw_cell)
-                        credit = _parse_amount(deposit_cell)
+                            if date_cell:
+                                parsed_date = _parse_date(date_cell)
+                                if parsed_date:
+                                    current_date = parsed_date
+                            if not current_date and not narration_cell:
+                                continue
 
-                        if not narration and debit is None and credit is None:
-                            continue
+                            narration = _clean_text(narration_cell)
+                            if narration and any(
+                                narration.lower().startswith(prefix)
+                                for prefix in SUMMARY_PREFIXES
+                            ):
+                                last_row = None
+                                continue
 
-                        if (
-                            (not date_cell or not current_date)
-                            and narration
-                            and debit is None
-                            and credit is None
-                            and last_row is not None
-                        ):
-                            last_row['particulars'] = (
-                                last_row.get('particulars', '') + ' ' + narration
-                            ).strip()
-                            continue
+                            raw_withdraw = withdraw_cell.strip()
+                            raw_deposit = deposit_cell.strip()
+                            debit = _parse_amount(raw_withdraw)
+                            credit = None
 
-                        if current_date is None:
-                            continue
+                            if raw_deposit:
+                                val = _parse_amount(raw_deposit)
+                                if raw_withdraw:
+                                    if val is not None:
+                                        pending_credits.append(val)
+                                else:
+                                    credit = val
+                            elif not raw_withdraw and pending_credits:
+                                credit = pending_credits.pop(0)
 
-                        row_obj = {
-                            'date': current_date,
-                            'particulars': narration,
-                            'debit': debit,
-                            'credit': credit,
-                        }
-                        out.append(row_obj)
-                        last_row = row_obj
+                            if not narration and debit is None and credit is None:
+                                continue
+
+                            if (
+                                (not date_cell or not current_date)
+                                and narration
+                                and debit is None
+                                and credit is None
+                                and last_row is not None
+                            ):
+                                last_row['particulars'] = (
+                                    last_row.get('particulars', '') + ' ' + narration
+                                ).strip()
+                                continue
+
+                            if current_date is None:
+                                continue
+
+                            row_obj = {
+                                'date': current_date,
+                                'particulars': narration,
+                                'debit': debit,
+                                'credit': credit,
+                            }
+                            out.append(row_obj)
+                            last_row = row_obj
     except Exception:
         return out
     return out

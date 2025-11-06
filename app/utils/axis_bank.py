@@ -75,18 +75,13 @@ def _strip_summary_tokens(text: str) -> str:
 
 def parse_axis_statement_from_tables(path: str, password: Optional[str] = None) -> List[Dict]:
     """Use pdfplumber to extract tables and parse Axis Bank transactions.
-    Works across pages that may omit headers after page 1 by carrying forward the last-known column indexes.
-    Also cleans merged rows where summary phrases appear after the particulars by stripping them out.
+    Only uses column 0 (date), column 2 (particulars), column 3 (debit) and column 4 (credit).
     """
     if pdfplumber is None:
         return []
     out: List[Dict] = []
-    # Persist indices across tables/pages if headers are missing
-    idx_date: Optional[int] = None
-    idx_part: Optional[int] = None
-    idx_debit: Optional[int] = None
-    idx_credit: Optional[int] = None
     last_row: Optional[Dict] = None
+    last_date: Optional[str] = None
 
     try:
         with pdfplumber.open(path, password=password) as pdf:
@@ -95,101 +90,86 @@ def parse_axis_statement_from_tables(path: str, password: Optional[str] = None) 
                 for tbl in tables:
                     if not tbl or len(tbl) < 1:
                         continue
-                    # Try to locate a header row in first few lines
-                    header_idx = None
-                    for i, row in enumerate(tbl[:5]):
-                        row_l = [str(c).strip().lower() if c is not None else '' for c in row]
-                        if any('tran' in x and 'date' in x for x in row_l) and any('particular' in x for x in row_l):
-                            header_idx = i
-                            break
-                    if header_idx is not None:
-                        headers = [str(c).strip() if c is not None else '' for c in tbl[header_idx]]
-                        headers_l = [h.lower() for h in headers]
-                        def find_idx(cands: list[str]) -> Optional[int]:
-                            for cand in cands:
-                                for i,h in enumerate(headers_l):
-                                    if cand in h:
-                                        return i
-                            return None
-                        idx_date = find_idx(['tran date', 'transaction date', 'date'])
-                        idx_part = find_idx(['particular', 'description'])
-                        idx_debit = find_idx(['debit', 'withdrawal', '(dr)'])
-                        idx_credit = find_idx(['credit', 'deposit', '(cr)'])
-                        data_rows = tbl[header_idx+1:]
-                    else:
-                        # No header found on this table; if we have previous indexes, treat all rows as data
-                        if idx_date is None or idx_part is None:
-                            # Can't parse without at least date and particulars
-                            continue
-                        data_rows = tbl
+                    data_rows = tbl[1:] if any('date' in (str(c).lower() if c else '') for c in tbl[0]) else tbl
 
                     for row in data_rows:
                         cells = [c if c is not None else '' for c in row]
                         if not any(str(x).strip() for x in cells):
                             continue
-                        raw_date = cells[idx_date] if idx_date is not None and idx_date < len(cells) else ''
-                        raw_part = cells[idx_part] if idx_part is not None and idx_part < len(cells) else ''
-                        d_iso = _parse_date(str(raw_date)) if raw_date else None
 
-                        # Continuation lines (no date) -> append to previous row
-                        if not d_iso and last_row and str(raw_part).strip():
-                            cont_text = ' '.join(str(c).strip() for c in cells if str(c).strip())
-                            # Try to update debit/credit from columns if present
-                            if idx_debit is not None and idx_debit < len(cells):
-                                deb = _parse_amount(cells[idx_debit])
-                                if deb is not None:
-                                    last_row['debit'] = deb
-                            if idx_credit is not None and idx_credit < len(cells):
-                                cr = _parse_amount(cells[idx_credit])
-                                if cr is not None:
-                                    last_row['credit'] = cr
-                            # Also scan particulars text for Cr/Dr tokens
-                            lower = cont_text.lower()
-                            if (' cr' in lower or 'credit' in lower) and (last_row.get('credit') is None):
-                                last_row['credit'] = _parse_amount(cont_text)
-                            if (' dr' in lower or 'debit' in lower) and (last_row.get('debit') is None):
-                                last_row['debit'] = _parse_amount(cont_text)
-                            # Append cleaned particulars (strip summary tokens if merged)
-                            last_row['particulars'] = (last_row.get('particulars','') + ' ' + _strip_summary_tokens(_clean_particulars(raw_part))).strip()
-                            continue
+                        date_vals = str(cells[0]).splitlines()
+                        part_vals = str(cells[2]).splitlines() if len(cells) > 2 else ['']
+                        debit_vals = str(cells[3]).splitlines() if len(cells) > 3 else []
+                        credit_vals = str(cells[4]).splitlines() if len(cells) > 4 else []
 
-                        if not d_iso:
-                            # Can't parse this line
-                            continue
+                        max_len = max(len(date_vals), len(part_vals), len(debit_vals) or 0, len(credit_vals) or 0, 1)
 
-                        # Skip pure summary rows
-                        low_part = str(raw_part).strip().lower()
-                        if low_part.startswith(('opening balance','transaction total','closing balance')):
-                            last_row = None
-                            continue
+                        for i in range(max_len):
+                            raw_date = date_vals[i] if i < len(date_vals) else ''
+                            raw_part = part_vals[i] if i < len(part_vals) else ''
+                            raw_debit = debit_vals[i] if i < len(debit_vals) else ''
+                            raw_credit = credit_vals[i] if i < len(credit_vals) else ''
 
-                        debit = _parse_amount(cells[idx_debit]) if idx_debit is not None and idx_debit < len(cells) else None
-                        credit = _parse_amount(cells[idx_credit]) if idx_credit is not None and idx_credit < len(cells) else None
+                            d_iso = _parse_date(raw_date) if raw_date else None
+                            if d_iso:
+                                last_date = d_iso
+                            else:
+                                d_iso = last_date
 
-                        # Fallback: amounts embedded in particulars
-                        if (debit is None and credit is None) and raw_part:
-                            lower = str(raw_part).lower()
-                            if ' cr' in lower or 'credit' in lower:
-                                credit = _parse_amount(raw_part)
-                            if ' dr' in lower or 'debit' in lower and credit is None:
-                                debit = _parse_amount(raw_part)
+                            part_clean = _strip_summary_tokens(_clean_particulars(raw_part))
+                            if part_clean and part_clean.lower().startswith(('opening balance','transaction total','closing balance')):
+                                last_row = None
+                                continue
 
-                        part_clean = _strip_summary_tokens(_clean_particulars(raw_part))
-                        if not part_clean:
-                            last_row = None
-                            continue
+                            debit = _parse_amount(raw_debit) if raw_debit else None
+                            credit = _parse_amount(raw_credit) if raw_credit else None
 
-                        item = {
-                            'date': d_iso,
-                            'particulars': part_clean,
-                            'debit': debit,
-                            'credit': credit,
-                        }
-                        out.append(item)
-                        last_row = item
+                            if not part_clean and debit is None and credit is None:
+                                continue
+
+                            if d_iso is None:
+                                if last_row and part_clean:
+                                    last_row['particulars'] = (last_row.get('particulars','') + ' ' + part_clean).strip()
+                                    if debit is not None and last_row.get('debit') is None:
+                                        last_row['debit'] = debit
+                                    if credit is not None and last_row.get('credit') is None:
+                                        last_row['credit'] = credit
+                                continue
+
+                            item = {
+                                'date': d_iso,
+                                'particulars': part_clean,
+                                'debit': debit,
+                                'credit': credit,
+                            }
+                            out.append(item)
+                            last_row = item
     except Exception:
         return out
-    return out
+
+    if not out:
+        return out
+    merged: List[Dict] = []
+    for item in out:
+        if merged:
+            prev = merged[-1]
+            if (
+                item['date'] == prev['date']
+                and item['debit'] is None
+                and item['credit'] is None
+                and item['particulars']
+            ):
+                prev['particulars'] = (prev['particulars'] + ' ' + item['particulars']).strip()
+                continue
+        merged.append(item)
+    cleaned = [
+        r for r in merged
+        if not (
+            r['particulars'] == ''
+            and (r['debit'] is not None or r['credit'] is not None)
+        )
+    ]
+    return cleaned
 
 
 def parse_axis_statement_from_text(text: str) -> List[Dict]:
