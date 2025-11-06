@@ -65,143 +65,94 @@ SUMMARY_PREFIXES = (
 
 
 def parse_hdfc_tables(path: str, password: Optional[str] = None) -> List[Dict]:
+    """Parse tables using pdfplumber with explicit column mapping based on the
+    standard HDFC layout (Date, Narration, Chq/Ref, Value Dt, Withdrawal, Deposit, Balance).
+    """
     if pdfplumber is None:
         return []
     out: List[Dict] = []
-    idx_date: Optional[int] = None
-    idx_narration: Optional[int] = None
-    idx_withdrawal: Optional[int] = None
-    idx_deposit: Optional[int] = None
     last_row: Optional[Dict] = None
-    last_date_iso: Optional[str] = None
+    current_date: Optional[str] = None
+
+    table_settings = {
+        "vertical_strategy": "lines",
+        "horizontal_strategy": "lines",
+        "snap_tolerance": 3,
+        "join_tolerance": 3,
+        "intersection_y_tolerance": 3,
+    }
 
     try:
         with pdfplumber.open(path, password=password) as pdf:
             for page in pdf.pages:
-                tables = page.extract_tables() or []
+                tables = page.extract_tables(table_settings=table_settings) or []
                 for tbl in tables:
-                    if not tbl:
+                    if not tbl or len(tbl) < 2:
                         continue
-                    header_idx = None
+                    # identify header row
+                    header_row = None
+                    data_start_idx = 0
                     for i, row in enumerate(tbl[:4]):
-                        lowered = [str(c).strip().lower() if c else '' for c in row]
-                        if any('date' in cell for cell in lowered) and any(
-                            ('narration' in cell) or ('particular' in cell)
-                            for cell in lowered
-                        ):
-                            header_idx = i
+                        cell0 = (row[0] or '').strip().lower()
+                        cell1 = (row[1] or '').strip().lower()
+                        if 'date' in cell0 and ('narration' in cell1 or 'details' in cell1):
+                            header_row = row
+                            data_start_idx = i + 1
                             break
-                    if header_idx is not None:
-                        headers = [
-                            str(c).strip().lower() if c is not None else ''
-                            for c in tbl[header_idx]
-                        ]
+                    if header_row is None:
+                        # if we can't locate headers, skip to next table
+                        continue
 
-                        def find_idx(cands: List[str]) -> Optional[int]:
-                            for cand in cands:
-                                for i, h in enumerate(headers):
-                                    if cand in h:
-                                        return i
-                            return None
-
-                        idx_date = find_idx(['date', 'tran date', 'transaction date', 'value dt'])
-                        idx_narration = find_idx(['narration', 'particular', 'details', 'description'])
-                        idx_withdrawal = find_idx(['withdrawal', 'withdrawal amt', 'debit', 'dr'])
-                        idx_deposit = find_idx(['deposit', 'deposit amt', 'credit', 'cr'])
-                        # Fallback to known column positions for standard HDFC layout
-                        if idx_date is None:
-                            idx_date = 0
-                        if idx_narration is None:
-                            idx_narration = 1
-                        if idx_withdrawal is None and len(tbl[header_idx]) > 4:
-                            idx_withdrawal = 4
-                        if idx_deposit is None and len(tbl[header_idx]) > 5:
-                            idx_deposit = 5
-                        data_rows = tbl[header_idx + 1 :]
-                    else:
-                        if idx_date is None or idx_narration is None:
+                    for raw_row in tbl[data_start_idx:]:
+                        cells = [c.strip() if isinstance(c, str) else '' for c in raw_row]
+                        if len(cells) < 2:
                             continue
-                        data_rows = tbl
+                        date_cell = cells[0]
+                        narration_cell = cells[1]
+                        withdraw_cell = cells[4] if len(cells) > 4 else ''
+                        deposit_cell = cells[5] if len(cells) > 5 else ''
 
-                    for row in data_rows:
-                        cells = [c if c is not None else '' for c in row]
-                        if not any(str(c).strip() for c in cells):
+                        if date_cell:
+                            parsed_date = _parse_date(date_cell)
+                            if parsed_date:
+                                current_date = parsed_date
+                        if not current_date and not narration_cell:
                             continue
 
-                        raw_date = (
-                            cells[idx_date]
-                            if idx_date is not None and idx_date < len(cells)
-                            else ''
-                        )
-                        narration_cell = (
-                            cells[idx_narration]
-                            if idx_narration is not None and idx_narration < len(cells)
-                            else ''
-                        )
-                        narr_clean = _clean_text(narration_cell)
-                        withdraw = (
-                            _parse_amount(cells[idx_withdrawal])
-                            if idx_withdrawal is not None and idx_withdrawal < len(cells)
-                            else None
-                        )
-                        deposit = (
-                            _parse_amount(cells[idx_deposit])
-                            if idx_deposit is not None and idx_deposit < len(cells)
-                            else None
-                        )
-
-                        d_iso = _parse_date(raw_date)
-                        if d_iso:
-                            last_date_iso = d_iso
-                        else:
-                            d_iso = last_date_iso
-
-                        # Treat blank line items without amounts as narration continuation
-                        if (
-                            narr_clean
-                            and withdraw is None
-                            and deposit is None
-                            and d_iso is None
-                            and last_row
-                        ):
-                            last_row['particulars'] = (
-                                last_row.get('particulars', '') + ' ' + narr_clean
-                            ).strip()
-                            continue
-
-                        if not narr_clean and withdraw is None and deposit is None:
-                            continue
-
-                        if narr_clean and any(
-                            narr_clean.lower().startswith(pref) for pref in SUMMARY_PREFIXES
+                        narration = _clean_text(narration_cell)
+                        if narration and any(
+                            narration.lower().startswith(prefix) for prefix in SUMMARY_PREFIXES
                         ):
                             last_row = None
                             continue
 
-                        if d_iso is None:
-                            # Without a date we cannot create a new record
+                        debit = _parse_amount(withdraw_cell)
+                        credit = _parse_amount(deposit_cell)
+
+                        if not narration and debit is None and credit is None:
                             continue
 
-                        row_obj = {
-                            'date': d_iso,
-                            'particulars': narr_clean,
-                            'debit': withdraw,
-                            'credit': deposit,
-                        }
-
-                        # If this row is purely a continuation (no amounts) attach to previous record
                         if (
-                            withdraw is None
-                            and deposit is None
+                            (not date_cell or not current_date)
+                            and narration
+                            and debit is None
+                            and credit is None
                             and last_row is not None
-                            and narr_clean
-                            and row_obj['date'] == last_row.get('date')
                         ):
                             last_row['particulars'] = (
-                                last_row.get('particulars', '') + ' ' + narr_clean
+                                last_row.get('particulars', '') + ' ' + narration
                             ).strip()
                             continue
 
+                        if current_date is None:
+                            continue
+
+                        row_obj = {
+                            'date': current_date,
+                            'particulars': narration,
+                            'debit': debit,
+                            'credit': credit,
+                        }
                         out.append(row_obj)
                         last_row = row_obj
     except Exception:
