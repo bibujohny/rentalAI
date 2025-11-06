@@ -20,6 +20,9 @@ SUMMARY_LINE_KEYWORDS = (
     "registeredofficeaddress",
     "thisstatement",
     "hdfcbankgstinnumber",
+    "statement from",
+    "account branch",
+    "account type",
 )
 
 
