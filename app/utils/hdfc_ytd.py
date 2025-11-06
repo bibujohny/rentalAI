@@ -23,6 +23,22 @@ SUMMARY_LINE_KEYWORDS = (
     "statement from",
     "account branch",
     "account type",
+    "page no",
+    "statementofaccount",
+    "address :",
+    "city :",
+    "state :",
+    "phone no",
+    "email :",
+    "cust id",
+    "account no",
+    "a/c open date",
+    "account status",
+    "rtgs/neft ifsc",
+    "micr",
+    "branch code",
+    "nomination",
+    "joint holders",
 )
 
 
