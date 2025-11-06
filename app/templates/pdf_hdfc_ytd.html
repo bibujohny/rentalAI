@@ -150,6 +150,38 @@
     {% endif %}
   </div>
 </div>
+
+{% if highlight_rows %}
+<div class="card mb-4 overflow-auto">
+  <div class="flex items-baseline justify-between mb-3">
+    <div>
+      <div class="text-sm text-slate-500 uppercase tracking-wide">Focused transactions</div>
+      <h3 class="text-xl font-semibold text-slate-800 dark:text-slate-200">{{ highlight_rows|length }} entries containing "{{ highlight_term }}"</h3>
+    </div>
+    <div class="text-xs text-slate-500">Sorted by date</div>
+  </div>
+  <table class="table">
+    <thead>
+      <tr>
+        <th class="th">Date</th>
+        <th class="th">Narration</th>
+        <th class="th text-right">Withdrawal</th>
+        <th class="th text-right">Deposit</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in highlight_rows %}
+      <tr class="bg-amber-50/70 dark:bg-amber-900/40">
+        <td class="td whitespace-nowrap">{{ r.date }}</td>
+        <td class="td">{{ r.narration }}</td>
+        <td class="td text-right">{% if r.withdrawal %}₹ {{ r.withdrawal|fmt_money }}{% else %}-{% endif %}</td>
+        <td class="td text-right">{% if r.deposit %}₹ {{ r.deposit|fmt_money }}{% else %}-{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
 {% endif %}
 
 <div class="card overflow-auto">
