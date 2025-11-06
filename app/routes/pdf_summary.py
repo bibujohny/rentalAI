@@ -28,6 +28,12 @@ def upload_dir() -> str:
     return path
 
 
+def hdfc_saved_base() -> str:
+    base = os.path.join(upload_dir(), 'hdfc_ytd_data')
+    os.makedirs(base, exist_ok=True)
+    return base
+
+
 
 @pdf_bp.route('/summary', methods=['GET', 'POST'])
 @login_required
@@ -401,22 +407,105 @@ def hdfc_ytd():
     rows = None
     totals = None
     ytd_totals = None
+    saved_files = None
+    saved_all = None
+
+    view_year = request.args.get('view_year', type=int)
+    view_file = request.args.get('view_file')
+
+    if request.method == 'GET' and view_year:
+        base = hdfc_saved_base()
+        year_dir = os.path.join(base, str(view_year))
+        if os.path.isdir(year_dir):
+            try:
+                files = [
+                    os.path.join(year_dir, f)
+                    for f in os.listdir(year_dir)
+                    if f.endswith('.json')
+                ]
+                files_meta = []
+                for p in files:
+                    try:
+                        st = os.stat(p)
+                        files_meta.append({
+                            'name': os.path.basename(p),
+                            'mtime': datetime.fromtimestamp(st.st_mtime).strftime('%Y-%m-%d %H:%M'),
+                            'size_kb': round(st.st_size / 1024, 1),
+                            'path': p,
+                        })
+                    except Exception:
+                        continue
+                files_meta.sort(key=lambda x: os.path.getmtime(os.path.join(year_dir, x['name'])), reverse=True)
+                saved_files = files_meta
+                if files_meta:
+                    chosen = None
+                    if view_file and any(f['name'] == view_file for f in files_meta):
+                        chosen = os.path.join(year_dir, view_file)
+                    else:
+                        chosen = os.path.join(year_dir, files_meta[0]['name'])
+                    with open(chosen, 'r', encoding='utf-8') as fh:
+                        data = json.load(fh)
+                    rows = data.get('rows') or []
+                    rows.sort(key=lambda r: r.get('date') or '')
+                    income_total = round(sum(r.get('deposit') or 0.0 for r in rows), 2)
+                    expense_total = round(sum(r.get('withdrawal') or 0.0 for r in rows), 2)
+                    totals = {
+                        'income_total': income_total,
+                        'expense_total': expense_total,
+                        'net': round(income_total - expense_total, 2),
+                        'count': len(rows),
+                    }
+                    ytd_totals = compute_ytd_totals(rows)
+                    flash(f"Loaded saved data for {view_year}", 'info')
+                else:
+                    flash('No saved data found for the selected year.', 'warning')
+            except Exception:
+                current_app.logger.exception('Failed to load saved HDFC YTD data')
+                flash('Failed to load saved data.', 'danger')
+
+    if request.method == 'GET':
+        try:
+            base = hdfc_saved_base()
+            all_items = []
+            if os.path.isdir(base):
+                for yname in sorted(os.listdir(base), reverse=True):
+                    ypath = os.path.join(base, yname)
+                    if not os.path.isdir(ypath):
+                        continue
+                    for fname in sorted(os.listdir(ypath), reverse=True):
+                        if not fname.endswith('.json'):
+                            continue
+                        fpath = os.path.join(ypath, fname)
+                        try:
+                            st = os.stat(fpath)
+                            all_items.append({
+                                'year': int(yname),
+                                'name': fname,
+                                'mtime': datetime.fromtimestamp(st.st_mtime).strftime('%Y-%m-%d %H:%M'),
+                                'size_kb': round(st.st_size / 1024, 1),
+                            })
+                        except Exception:
+                            continue
+            saved_all = sorted(all_items, key=lambda x: (x['year'], x['mtime']), reverse=True)
+        except Exception:
+            current_app.logger.exception('Failed to list all saved HDFC YTD JSONs')
+            saved_all = None
 
     if request.method == 'POST':
         f = request.files.get('file')
         password = request.form.get('password') or (current_app.config.get('PDF_DEFAULT_PASSWORD') or None)
         if not f or f.filename == '':
             flash('Please choose a PDF file.', 'warning')
-            return render_template('pdf_hdfc_ytd.html', rows=None, totals=None, ytd_totals=None)
+            return render_template('pdf_hdfc_ytd.html', rows=None, totals=None, ytd_totals=None, saved_files=saved_files, saved_all=saved_all)
         if not allowed_file(f.filename):
             flash('Only PDF files are allowed.', 'warning')
-            return render_template('pdf_hdfc_ytd.html', rows=None, totals=None, ytd_totals=None)
+            return render_template('pdf_hdfc_ytd.html', rows=None, totals=None, ytd_totals=None, saved_files=saved_files, saved_all=saved_all)
         f.seek(0, os.SEEK_END)
         size_mb = f.tell() / (1024 * 1024)
         f.seek(0)
         if size_mb > MAX_SIZE_MB:
             flash(f'File too large: {size_mb:.1f} MB (max {MAX_SIZE_MB} MB).', 'warning')
-            return render_template('pdf_hdfc_ytd.html', rows=None, totals=None, ytd_totals=None)
+            return render_template('pdf_hdfc_ytd.html', rows=None, totals=None, ytd_totals=None, saved_files=saved_files, saved_all=saved_all)
         try:
             updir = upload_dir()
             unique_name = f"{uuid.uuid4().hex}_{secure_filename(f.filename)}"
@@ -425,13 +514,14 @@ def hdfc_ytd():
         except Exception as e:
             current_app.logger.exception("Upload save failed (hdfc ytd)")
             flash(f'Upload failed: {e}', 'danger')
-            return render_template('pdf_hdfc_ytd.html', rows=None, totals=None, ytd_totals=None)
+            return render_template('pdf_hdfc_ytd.html', rows=None, totals=None, ytd_totals=None, saved_files=saved_files, saved_all=saved_all)
 
         try:
             current_app.logger.info(f"HDFC YTD parse started file={tmp_path}, password_used={bool(password)}")
             parsed_rows = parse_hdfc_ytd(tmp_path, password=password)
             current_app.logger.info(f"HDFC YTD parsed {len(parsed_rows)} rows")
             if not parsed_rows:
+                current_app.logger.warning("HDFC YTD produced no rows file=%s password_used=%s", tmp_path, bool(password))
                 flash('No transactions found. Ensure this statement has a visible transactions table.', 'warning')
             else:
                 parsed_rows.sort(key=lambda r: r.get('date') or '')
@@ -445,6 +535,29 @@ def hdfc_ytd():
                     'count': len(rows),
                 }
                 ytd_totals = compute_ytd_totals(rows)
+                try:
+                    base = hdfc_saved_base()
+                    years_present = sorted({int(r['date'].split('-')[0]) for r in rows if r.get('date')})
+                    timestamp = datetime.utcnow().strftime('%Y%m%d%H%M%S')
+                    for year in years_present:
+                        year_dir = os.path.join(base, str(year))
+                        os.makedirs(year_dir, exist_ok=True)
+                        subset = [r for r in rows if r.get('date', '').startswith(str(year))]
+                        if not subset:
+                            continue
+                        fname = f"hdfc_{year}_{timestamp}_{uuid.uuid4().hex[:6]}.json"
+                        fpath = os.path.join(year_dir, fname)
+                        with open(fpath, 'w', encoding='utf-8') as fh:
+                            json.dump({'year': year, 'rows': subset}, fh, ensure_ascii=False)
+                        current_app.logger.info(
+                            "Saved HDFC YTD snapshot year=%s rows=%s file=%s",
+                            year,
+                            len(subset),
+                            fpath,
+                        )
+                    flash('Saved parsed data for year-to-date reference.', 'success')
+                except Exception:
+                    current_app.logger.exception('Failed to save HDFC YTD JSON')
         except Exception as e:
             current_app.logger.exception("HDFC YTD parsing failed")
             flash(f'Error parsing statement: {e}', 'danger')
@@ -455,4 +568,4 @@ def hdfc_ytd():
             except Exception:
                 pass
 
-    return render_template('pdf_hdfc_ytd.html', rows=rows, totals=totals, ytd_totals=ytd_totals)
+    return render_template('pdf_hdfc_ytd.html', rows=rows, totals=totals, ytd_totals=ytd_totals, saved_files=saved_files, saved_all=saved_all, selected_year=view_year, selected_file=view_file)

@@ -1,4 +1,5 @@
 from __future__ import annotations
+import logging
 from typing import List, Dict, Optional
 from dateutil import parser as dateparser
 
@@ -6,6 +7,8 @@ try:
     import pdfplumber
 except Exception:  # pragma: no cover
     pdfplumber = None
+
+logger = logging.getLogger(__name__)
 
 SUMMARY_KEYWORDS = ("closing balance", "opening balance", "total")
 
@@ -61,44 +64,81 @@ def parse_hdfc_ytd(path: str, password: Optional[str] = None) -> List[Dict]:
     }
 
     try:
+        logger.debug("Opening HDFC PDF path=%s", path)
         with pdfplumber.open(path, password=password) as pdf:
-            for page in pdf.pages:
+            for page_number, page in enumerate(pdf.pages):
                 tables = page.extract_tables(table_settings=table_settings) or []
+                logger.debug("Page %s extracted %s tables", page_number, len(tables))
                 for tbl in tables:
                     if not tbl or len(tbl[0]) < 6:
+                        logger.debug("Skipping table with insufficient columns on page %s", page_number)
                         continue
                     data_rows = tbl[1:] if "date" in (str(tbl[0][0]).lower()) else tbl
+                    logger.debug("Processing table on page %s with %s data rows", page_number, len(data_rows))
+                    pending_deposits: List[float] = []
                     for raw in data_rows:
-                        # Ensure we have at least 6 columns (date, narration, ..., withdrawal, deposit)
                         padded = list(raw) + [""] * (6 - len(raw))
-                        date_cell = padded[0] or ""
-                        narration_cell = padded[1] or ""
-                        withdrawal_cell = padded[4] or ""
-                        deposit_cell = padded[5] or ""
+                        date_vals = str(padded[0] or "").splitlines()
+                        narration_vals = str(padded[1] or "").splitlines()
+                        withdrawal_vals = str(padded[4] or "").splitlines()
+                        deposit_vals_raw = str(padded[5] or "").splitlines()
 
-                        narration_lines = [line.strip() for line in str(narration_cell).splitlines() if line.strip()]
-                        narration = " ".join(narration_lines)
-                        if not narration:
-                            continue
-                        low = narration.lower()
-                        if any(tok in low for tok in SUMMARY_KEYWORDS):
-                            continue
-
-                        current_date = _parse_date(date_cell, last_date)
-                        if not current_date:
-                            continue
-                        last_date = current_date
-
-                        rows.append(
-                            {
-                                "date": current_date,
-                                "narration": narration,
-                                "withdrawal": round(_parse_float(withdrawal_cell), 2),
-                                "deposit": round(_parse_float(deposit_cell), 2),
-                            }
+                        max_len = max(
+                            len(date_vals) or 1,
+                            len(narration_vals) or 1,
+                            len(withdrawal_vals) or 0,
+                            len(deposit_vals_raw) or 0,
                         )
-    except Exception:
+
+                        deposit_vals = [''] * max_len
+                        start = max_len - len(deposit_vals_raw)
+                        if start < 0:
+                            start = 0
+                        for offset, val in enumerate(deposit_vals_raw[-max_len:]):
+                            deposit_vals[start + offset] = val
+
+                        for idx in range(max_len):
+                            date_cell = date_vals[idx] if idx < len(date_vals) else ""
+                            narration_cell = narration_vals[idx] if idx < len(narration_vals) else ""
+                            withdrawal_cell = withdrawal_vals[idx] if idx < len(withdrawal_vals) else ""
+                            deposit_cell = deposit_vals[idx]
+
+                            narration_raw_lines = [line.strip() for line in str(narration_cell).splitlines() if line.strip()]
+                            narration = " ".join(narration_raw_lines)
+                            if not narration:
+                                continue
+                            low = narration.lower()
+                            if any(tok in low for tok in SUMMARY_KEYWORDS):
+                                logger.debug("Skipping summary row narration=%s", narration)
+                                continue
+
+                            current_date = _parse_date(date_cell, last_date)
+                            if not current_date:
+                                logger.debug("Unable to parse date date_cell=%s last_date=%s", date_cell, last_date)
+                                continue
+                            last_date = current_date
+
+                            withdrawal_amt = round(_parse_float(withdrawal_cell), 2)
+                            deposit_amt = round(_parse_float(deposit_cell), 2)
+                            if deposit_amt and withdrawal_amt:
+                                pending_deposits.append(deposit_amt)
+                                deposit_amt = 0.0
+                            if not deposit_amt and pending_deposits and withdrawal_amt == 0.0:
+                                deposit_amt = pending_deposits.pop(0)
+
+                            rows.append(
+                                {
+                                    "date": current_date,
+                                    "narration": narration,
+                                    "withdrawal": withdrawal_amt,
+                                    "deposit": deposit_amt,
+                                }
+                            )
+    except Exception as exc:
+        logger.exception("Failed to parse HDFC PDF path=%s error=%s", path, exc)
         return rows
+
+    logger.info("HDFC YTD parser produced %s rows for %s", len(rows), path)
     return rows
 
 

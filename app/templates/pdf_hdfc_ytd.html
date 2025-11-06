@@ -17,6 +17,38 @@
   </form>
 </div>
 
+{% if saved_all %}
+<div class="card mb-4">
+  <h2 class="text-lg font-semibold mb-3">Saved statements</h2>
+  <div class="overflow-auto">
+    <table class="table">
+      <thead>
+        <tr>
+          <th class="th">Year</th>
+          <th class="th">File</th>
+          <th class="th">Saved At</th>
+          <th class="th">Size</th>
+          <th class="th">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in saved_all %}
+        <tr>
+          <td class="td">{{ item.year }}</td>
+          <td class="td">{{ item.name }}</td>
+          <td class="td">{{ item.mtime }}</td>
+          <td class="td">{{ item.size_kb }} KB</td>
+          <td class="td">
+            <a class="btn-outline" href="{{ url_for('pdf.hdfc_ytd') }}?view_year={{ item.year }}&view_file={{ item.name }}">View</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 {% if rows %}
 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
   <div class="p-4 rounded bg-teal-50 dark:bg-slate-700/50">
@@ -87,6 +119,21 @@
       {% endfor %}
     </tbody>
   </table>
+</div>
+{% endif %}
+
+{% if saved_files %}
+<div class="card mb-4">
+  <h2 class="text-lg font-semibold mb-3">Files for {{ selected_year }}</h2>
+  <div class="text-sm text-slate-500 mb-2">Showing JSON snapshots saved for this year.</div>
+  <ul class="list-disc pl-5 space-y-1 text-sm text-slate-600">
+    {% for f in saved_files %}
+    <li>
+      <a class="text-teal-600 underline" href="{{ url_for('pdf.hdfc_ytd') }}?view_year={{ selected_year }}&view_file={{ f.name }}">{{ f.name }}</a>
+      <span class="ml-2 text-slate-400">({{ f.mtime }}, {{ f.size_kb }} KB)</span>
+    </li>
+    {% endfor %}
+  </ul>
 </div>
 {% endif %}
 {% endblock %}
