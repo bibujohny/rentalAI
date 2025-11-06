@@ -412,6 +412,22 @@ def hdfc_ytd():
 
     view_year = request.args.get('view_year', type=int)
     view_file = request.args.get('view_file')
+    delete_year = request.args.get('delete_year', type=int)
+    delete_file = request.args.get('delete_file')
+
+    if delete_year and delete_file:
+        try:
+            base = hdfc_saved_base()
+            target = os.path.join(base, str(delete_year), delete_file)
+            if os.path.isfile(target):
+                os.remove(target)
+                flash(f"Deleted saved file {delete_file}.", 'info')
+            else:
+                flash('Selected file not found.', 'warning')
+        except Exception:
+            current_app.logger.exception('Failed to delete HDFC YTD JSON')
+            flash('Failed to delete saved data.', 'danger')
+        return redirect(url_for('pdf.hdfc_ytd', view_year=delete_year))
 
     if request.method == 'GET' and view_year:
         base = hdfc_saved_base()

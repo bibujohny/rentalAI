@@ -40,6 +40,7 @@
           <td class="td">{{ item.size_kb }} KB</td>
           <td class="td">
             <a class="btn-outline" href="{{ url_for('pdf.hdfc_ytd') }}?view_year={{ item.year }}&view_file={{ item.name }}">View</a>
+            <a class="btn-outline bg-rose-100 text-rose-700" href="{{ url_for('pdf.hdfc_ytd') }}?delete_year={{ item.year }}&delete_file={{ item.name }}" onclick="return confirm('Delete saved file {{ item.name }}?');">Delete</a>
           </td>
         </tr>
         {% endfor %}
@@ -131,6 +132,7 @@
     <li>
       <a class="text-teal-600 underline" href="{{ url_for('pdf.hdfc_ytd') }}?view_year={{ selected_year }}&view_file={{ f.name }}">{{ f.name }}</a>
       <span class="ml-2 text-slate-400">({{ f.mtime }}, {{ f.size_kb }} KB)</span>
+      <a class="ml-2 text-rose-600 underline" href="{{ url_for('pdf.hdfc_ytd') }}?delete_year={{ selected_year }}&delete_file={{ f.name }}" onclick="return confirm('Delete saved file {{ f.name }}?');">Delete</a>
     </li>
     {% endfor %}
   </ul>
