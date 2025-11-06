@@ -17,6 +17,21 @@
   </form>
 </div>
 
+<div class="card mb-4">
+  <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+    <input type="hidden" name="view_year" value="{{ selected_year or '' }}">
+    <input type="hidden" name="view_file" value="{{ selected_file or '' }}">
+    <div class="md:col-span-3">
+      <label class="text-sm text-slate-500">Highlight payee or narration text</label>
+      <input type="text" name="highlight" value="{{ highlight_term or '' }}" class="input" placeholder="e.g. TRADESINDIA">
+    </div>
+    <div class="flex gap-2 md:col-span-2">
+      <button type="submit" class="btn">Apply Highlight</button>
+      <a class="btn-outline" href="{% if selected_year %}{{ url_for('pdf.hdfc_ytd', view_year=selected_year, view_file=selected_file) }}{% else %}{{ url_for('pdf.hdfc_ytd') }}{% endif %}">Clear</a>
+    </div>
+  </form>
+</div>
+
 {% if saved_all %}
 <div class="card mb-4">
   <h2 class="text-lg font-semibold mb-3">Saved statements</h2>
@@ -39,7 +54,11 @@
           <td class="td">{{ item.mtime }}</td>
           <td class="td">{{ item.size_kb }} KB</td>
           <td class="td">
-            <a class="btn-outline" href="{{ url_for('pdf.hdfc_ytd') }}?view_year={{ item.year }}&view_file={{ item.name }}">View</a>
+            {% if highlight_term %}
+            <a class="btn-outline" href="{{ url_for('pdf.hdfc_ytd', view_year=item.year, view_file=item.name, highlight=highlight_term) }}">View</a>
+            {% else %}
+            <a class="btn-outline" href="{{ url_for('pdf.hdfc_ytd', view_year=item.year, view_file=item.name) }}">View</a>
+            {% endif %}
             <a class="btn-outline bg-rose-100 text-rose-700" href="{{ url_for('pdf.hdfc_ytd') }}?delete_year={{ item.year }}&delete_file={{ item.name }}" onclick="return confirm('Delete saved file {{ item.name }}?');">Delete</a>
           </td>
         </tr>
@@ -98,6 +117,41 @@
 </div>
 {% endif %}
 
+{% if highlight_term %}
+<div class="card mb-4">
+  <div class="flex flex-col gap-3">
+    <div class="flex flex-wrap items-center gap-3">
+      <h2 class="text-lg font-semibold">Matches for "{{ highlight_term }}"</h2>
+      {% if highlight_summary %}
+      <span class="px-2 py-1 rounded bg-amber-100 text-amber-800 text-sm">{{ highlight_summary.count }} transactions</span>
+      {% endif %}
+    </div>
+    {% if highlight_summary %}
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+      <div class="p-3 rounded bg-white/40 dark:bg-slate-700/60 border border-amber-200 dark:border-amber-500/40">
+        <div class="text-xs uppercase tracking-wide text-slate-500">Payments (Withdrawals)</div>
+        <div class="text-xl font-semibold text-rose-600 dark:text-rose-300">₹ {{ highlight_summary.withdrawal_total|fmt_money }}</div>
+      </div>
+      <div class="p-3 rounded bg-white/40 dark:bg-slate-700/60 border border-amber-200 dark:border-amber-500/40">
+        <div class="text-xs uppercase tracking-wide text-slate-500">Deposits</div>
+        <div class="text-xl font-semibold text-emerald-600 dark:text-emerald-300">₹ {{ highlight_summary.deposit_total|fmt_money }}</div>
+      </div>
+      <div class="p-3 rounded bg-white/40 dark:bg-slate-700/60 border border-amber-200 dark:border-amber-500/40">
+        <div class="text-xs uppercase tracking-wide text-slate-500">Net Impact</div>
+        <div class="text-xl font-semibold text-slate-800 dark:text-slate-200">₹ {{ highlight_summary.net|fmt_money }}</div>
+      </div>
+      <div class="p-3 rounded bg-white/40 dark:bg-slate-700/60 border border-amber-200 dark:border-amber-500/40">
+        <div class="text-xs uppercase tracking-wide text-slate-500">Use a different filter</div>
+        <p class="text-sm text-slate-600 dark:text-slate-300">Update the highlight box above to focus on another payee.</p>
+      </div>
+    </div>
+    {% else %}
+    <div class="text-sm text-slate-500">No transactions matched this highlight. Try a different keyword or check statement spelling.</div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
 <div class="card overflow-auto">
   <div class="text-sm text-slate-500 mb-2">Transactions ({{ rows|length }})</div>
   <table class="table">
@@ -111,9 +165,15 @@
     </thead>
     <tbody>
       {% for r in rows %}
-      <tr>
+      {% set is_highlight = highlight_indices and (loop.index0 in highlight_indices) %}
+      <tr class="{% if is_highlight %}bg-amber-50 dark:bg-amber-900/30{% endif %}">
         <td class="td whitespace-nowrap">{{ r.date }}</td>
-        <td class="td">{{ r.narration }}</td>
+        <td class="td">
+          {{ r.narration }}
+          {% if is_highlight %}
+          <span class="ml-2 inline-flex items-center rounded-full bg-amber-200 text-amber-800 text-xs px-2 py-0.5">Highlighted</span>
+          {% endif %}
+        </td>
         <td class="td text-right">{% if r.withdrawal %}₹ {{ r.withdrawal|fmt_money }}{% else %}-{% endif %}</td>
         <td class="td text-right">{% if r.deposit %}₹ {{ r.deposit|fmt_money }}{% else %}-{% endif %}</td>
       </tr>
@@ -130,7 +190,11 @@
   <ul class="list-disc pl-5 space-y-1 text-sm text-slate-600">
     {% for f in saved_files %}
     <li>
-      <a class="text-teal-600 underline" href="{{ url_for('pdf.hdfc_ytd') }}?view_year={{ selected_year }}&view_file={{ f.name }}">{{ f.name }}</a>
+      {% if highlight_term %}
+      <a class="text-teal-600 underline" href="{{ url_for('pdf.hdfc_ytd', view_year=selected_year, view_file=f.name, highlight=highlight_term) }}">{{ f.name }}</a>
+      {% else %}
+      <a class="text-teal-600 underline" href="{{ url_for('pdf.hdfc_ytd', view_year=selected_year, view_file=f.name) }}">{{ f.name }}</a>
+      {% endif %}
       <span class="ml-2 text-slate-400">({{ f.mtime }}, {{ f.size_kb }} KB)</span>
       <a class="ml-2 text-rose-600 underline" href="{{ url_for('pdf.hdfc_ytd') }}?delete_year={{ selected_year }}&delete_file={{ f.name }}" onclick="return confirm('Delete saved file {{ f.name }}?');">Delete</a>
     </li>

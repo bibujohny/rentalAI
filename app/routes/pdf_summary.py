@@ -409,6 +409,16 @@ def hdfc_ytd():
     ytd_totals = None
     saved_files = None
     saved_all = None
+    highlight_term = None
+
+    if request.method == 'POST':
+        highlight_term = request.form.get('highlight') or request.args.get('highlight')
+    else:
+        highlight_term = request.args.get('highlight')
+    if highlight_term:
+        highlight_term = highlight_term.strip()
+        if not highlight_term:
+            highlight_term = None
 
     view_year = request.args.get('view_year', type=int)
     view_file = request.args.get('view_file')
@@ -427,7 +437,7 @@ def hdfc_ytd():
         except Exception:
             current_app.logger.exception('Failed to delete HDFC YTD JSON')
             flash('Failed to delete saved data.', 'danger')
-        return redirect(url_for('pdf.hdfc_ytd', view_year=delete_year))
+        return redirect(url_for('pdf.hdfc_ytd', view_year=delete_year, highlight=highlight_term))
 
     if request.method == 'GET' and view_year:
         base = hdfc_saved_base()
@@ -507,21 +517,24 @@ def hdfc_ytd():
             current_app.logger.exception('Failed to list all saved HDFC YTD JSONs')
             saved_all = None
 
+    highlight_indices = set()
+    highlight_summary = None
+
     if request.method == 'POST':
         f = request.files.get('file')
         password = request.form.get('password') or (current_app.config.get('PDF_DEFAULT_PASSWORD') or None)
         if not f or f.filename == '':
             flash('Please choose a PDF file.', 'warning')
-            return render_template('pdf_hdfc_ytd.html', rows=None, totals=None, ytd_totals=None, saved_files=saved_files, saved_all=saved_all)
+            return render_template('pdf_hdfc_ytd.html', rows=None, totals=None, ytd_totals=None, saved_files=saved_files, saved_all=saved_all, highlight_term=highlight_term, highlight_summary=None, highlight_indices=[], selected_year=view_year, selected_file=view_file)
         if not allowed_file(f.filename):
             flash('Only PDF files are allowed.', 'warning')
-            return render_template('pdf_hdfc_ytd.html', rows=None, totals=None, ytd_totals=None, saved_files=saved_files, saved_all=saved_all)
+            return render_template('pdf_hdfc_ytd.html', rows=None, totals=None, ytd_totals=None, saved_files=saved_files, saved_all=saved_all, highlight_term=highlight_term, highlight_summary=None, highlight_indices=[], selected_year=view_year, selected_file=view_file)
         f.seek(0, os.SEEK_END)
         size_mb = f.tell() / (1024 * 1024)
         f.seek(0)
         if size_mb > MAX_SIZE_MB:
             flash(f'File too large: {size_mb:.1f} MB (max {MAX_SIZE_MB} MB).', 'warning')
-            return render_template('pdf_hdfc_ytd.html', rows=None, totals=None, ytd_totals=None, saved_files=saved_files, saved_all=saved_all)
+            return render_template('pdf_hdfc_ytd.html', rows=None, totals=None, ytd_totals=None, saved_files=saved_files, saved_all=saved_all, highlight_term=highlight_term, highlight_summary=None, highlight_indices=[], selected_year=view_year, selected_file=view_file)
         try:
             updir = upload_dir()
             unique_name = f"{uuid.uuid4().hex}_{secure_filename(f.filename)}"
@@ -530,7 +543,7 @@ def hdfc_ytd():
         except Exception as e:
             current_app.logger.exception("Upload save failed (hdfc ytd)")
             flash(f'Upload failed: {e}', 'danger')
-            return render_template('pdf_hdfc_ytd.html', rows=None, totals=None, ytd_totals=None, saved_files=saved_files, saved_all=saved_all)
+            return render_template('pdf_hdfc_ytd.html', rows=None, totals=None, ytd_totals=None, saved_files=saved_files, saved_all=saved_all, highlight_term=highlight_term, highlight_summary=None, highlight_indices=[], selected_year=view_year, selected_file=view_file)
 
         try:
             current_app.logger.info(f"HDFC YTD parse started file={tmp_path}, password_used={bool(password)}")
@@ -584,4 +597,35 @@ def hdfc_ytd():
             except Exception:
                 pass
 
-    return render_template('pdf_hdfc_ytd.html', rows=rows, totals=totals, ytd_totals=ytd_totals, saved_files=saved_files, saved_all=saved_all, selected_year=view_year, selected_file=view_file)
+    if rows and highlight_term:
+        low = highlight_term.lower()
+        for idx, entry in enumerate(rows):
+            narration = (entry.get('narration') or '').lower()
+            if low in narration:
+                highlight_indices.add(idx)
+        if highlight_indices:
+            focus_rows = [rows[i] for i in sorted(highlight_indices)]
+            withdrawal_total = round(sum(r.get('withdrawal') or 0.0 for r in focus_rows), 2)
+            deposit_total = round(sum(r.get('deposit') or 0.0 for r in focus_rows), 2)
+            highlight_summary = {
+                "count": len(focus_rows),
+                "withdrawal_total": withdrawal_total,
+                "deposit_total": deposit_total,
+                "net": round(deposit_total - withdrawal_total, 2),
+            }
+
+    highlight_indices = sorted(highlight_indices)
+
+    return render_template(
+        'pdf_hdfc_ytd.html',
+        rows=rows,
+        totals=totals,
+        ytd_totals=ytd_totals,
+        saved_files=saved_files,
+        saved_all=saved_all,
+        selected_year=view_year,
+        selected_file=view_file,
+        highlight_term=highlight_term,
+        highlight_summary=highlight_summary,
+        highlight_indices=highlight_indices,
+    )
