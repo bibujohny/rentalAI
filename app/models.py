@@ -1,6 +1,7 @@
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
 from datetime import datetime, date
+from dateutil.relativedelta import relativedelta
 
 
 db = SQLAlchemy()
@@ -31,6 +32,69 @@ class Tenant(db.Model):
     consumer_number = db.Column(db.String(120), nullable=True)
     deposit_amount = db.Column(db.Float, default=0.0)
     building_id = db.Column(db.Integer, db.ForeignKey("building.id"), nullable=False)
+    primary_contact = db.Column(db.String(32), nullable=True)
+    secondary_contact = db.Column(db.String(32), nullable=True)
+    agreement_filename = db.Column(db.String(255), nullable=True)
+
+    changes = db.relationship("TenantChange", backref="tenant", cascade="all, delete-orphan", lazy=True)
+    complaints = db.relationship("TenantComplaint", backref="tenant", cascade="all, delete-orphan", lazy=True)
+    todos = db.relationship("TenantTodo", backref="tenant", cascade="all, delete-orphan", lazy=True)
+
+    @property
+    def duration_breakdown(self):
+        """Return a dict with years/months of tenancy based on start/end (or today)."""
+        if not self.start_date:
+            return {"years": 0, "months": 0}
+        end = self.end_date or date.today()
+        if end < self.start_date:
+            end = self.start_date
+        diff = relativedelta(end, self.start_date)
+        years = diff.years
+        months = diff.months
+        if diff.days > 0:
+            months += 1
+            if months >= 12:
+                years += 1
+                months -= 12
+        return {"years": years, "months": months}
+
+    def duration_display(self):
+        parts = []
+        breakdown = self.duration_breakdown
+        y, m = breakdown["years"], breakdown["months"]
+        if y:
+            parts.append(f"{y} year{'s' if y != 1 else ''}")
+        if m:
+            parts.append(f"{m} month{'s' if m != 1 else ''}")
+        return ", ".join(parts) if parts else "Less than a month"
+
+
+class TenantChange(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(db.Integer, db.ForeignKey("tenant.id"), nullable=False, index=True)
+    change_date = db.Column(db.Date, nullable=True)
+    description = db.Column(db.String(255), nullable=False)
+    amount_spent = db.Column(db.Float, default=0.0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class TenantComplaint(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(db.Integer, db.ForeignKey("tenant.id"), nullable=False, index=True)
+    description = db.Column(db.Text, nullable=False)
+    status = db.Column(db.String(20), default="open")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    resolved_at = db.Column(db.DateTime, nullable=True)
+
+
+class TenantTodo(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(db.Integer, db.ForeignKey("tenant.id"), nullable=False, index=True)
+    task = db.Column(db.String(255), nullable=False)
+    due_date = db.Column(db.Date, nullable=True)
+    is_done = db.Column(db.Boolean, default=False)
+    completed_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
 class LodgeGuest(db.Model):
@@ -69,8 +133,25 @@ def seed_demo_data():
         db.session.commit()
 
         # Tenants
-        t1 = Tenant(name="Anu Mathew", rent_amount=12000, start_date=date(2024, 1, 1), consumer_number="CN001", deposit_amount=24000, building_id=b.id)
-        t2 = Tenant(name="Rahul Nair", rent_amount=9000, start_date=date(2024, 3, 15), consumer_number="CN002", deposit_amount=18000, building_id=b.id)
+        t1 = Tenant(
+            name="Anu Mathew",
+            rent_amount=12000,
+            start_date=date(2024, 1, 1),
+            consumer_number="CN001",
+            deposit_amount=24000,
+            building_id=b.id,
+            primary_contact="9876543210",
+            secondary_contact="9876543211",
+        )
+        t2 = Tenant(
+            name="Rahul Nair",
+            rent_amount=9000,
+            start_date=date(2024, 3, 15),
+            consumer_number="CN002",
+            deposit_amount=18000,
+            building_id=b.id,
+            primary_contact="9876543222",
+        )
         db.session.add_all([t1, t2])
 
         # Lodge Guests
@@ -80,4 +161,22 @@ def seed_demo_data():
         g2.calculate_total()
         db.session.add_all([g1, g2])
 
+        db.session.commit()
+
+        # Sample change logs / complaints / todos
+        change = TenantChange(
+            tenant_id=t1.id,
+            description="Repainted living room",
+            change_date=date(2024, 2, 10),
+            amount_spent=3500,
+        )
+        complaint = TenantComplaint(
+            tenant_id=t1.id,
+            description="Water leakage near kitchen sink",
+        )
+        todo = TenantTodo(
+            tenant_id=t1.id,
+            task="Replace faulty kitchen tap",
+        )
+        db.session.add_all([change, complaint, todo])
         db.session.commit()

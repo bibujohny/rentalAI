@@ -1,67 +1,198 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="flex items-center justify-between mb-4">
-  <h1 class="text-2xl font-bold">Tenants</h1>
+<div class="flex items-center justify-between mb-6">
+  <h1 class="text-2xl font-bold">Tenant Management</h1>
 </div>
 
-<div class="card mb-4">
-  <form method="post" action="{{ url_for('tenants.add_tenant') }}" class="grid grid-cols-1 md:grid-cols-8 gap-2">
-    <input name="name" placeholder="Name" class="input" required>
-    <input name="rent_amount" placeholder="Rent Amount" type="number" step="0.01" class="input">
-    <input name="start_date" type="date" class="input">
-    <input name="end_date" type="date" class="input">
-    <input name="consumer_number" placeholder="Consumer Number" class="input">
-    <input name="deposit_amount" placeholder="Deposit Amount" type="number" step="0.01" class="input">
-    <select name="building_id" class="input">
-      {% for b in buildings %}<option value="{{ b.id }}">{{ b.name }}</option>{% endfor %}
-    </select>
-    <button class="btn">Add</button>
+<div class="card mb-8">
+  <h2 class="text-xl font-semibold mb-3">Add a Tenant</h2>
+  <form method="post" action="{{ url_for('tenants.add_tenant') }}" enctype="multipart/form-data" class="space-y-4">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+      <input name="name" placeholder="Full name" class="input" required>
+      <input name="rent_amount" placeholder="Rent amount" type="number" step="0.01" class="input">
+      <input name="deposit_amount" placeholder="Deposit amount" type="number" step="0.01" class="input">
+      <select name="building_id" class="input">
+        {% for b in buildings %}
+        <option value="{{ b.id }}">{{ b.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+      <input name="start_date" type="date" class="input" placeholder="Start date">
+      <input name="end_date" type="date" class="input" placeholder="End date (optional)">
+      <input name="consumer_number" placeholder="Electricity consumer #" class="input">
+      <input name="agreement" type="file" accept="application/pdf" class="input">
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <input name="primary_contact" placeholder="Primary contact number" class="input">
+      <input name="secondary_contact" placeholder="Secondary contact number" class="input">
+      <button class="btn md:justify-self-end">Add Tenant</button>
+    </div>
   </form>
 </div>
 
-<div class="card">
-  <table class="table">
-    <thead>
-      <tr>
-        <th class="th">Name</th><th class="th">Rent</th><th class="th">Start</th><th class="th">End</th>
-        <th class="th">Consumer #</th><th class="th">Deposit</th><th class="th">Building</th><th class="th">Actions</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for t in tenants %}
-      <tr>
-        <td class="td">{{ t.name }}</td>
-        <td class="td">₹ {{ '%.2f'|format(t.rent_amount) }}</td>
-        <td class="td">{{ t.start_date }}</td>
-        <td class="td">{{ t.end_date or '-' }}</td>
-        <td class="td">{{ t.consumer_number or '-' }}</td>
-        <td class="td">₹ {{ '%.2f'|format(t.deposit_amount) }}</td>
-        <td class="td">{{ t.building.name }}</td>
-        <td class="td">
-          <details>
-            <summary class="cursor-pointer text-teal-600">Edit</summary>
-            <form method="post" action="{{ url_for('tenants.edit_tenant', tenant_id=t.id) }}" class="grid grid-cols-1 md:grid-cols-8 gap-2 mt-2">
-              <input name="name" value="{{ t.name }}" class="input" required>
-              <input name="rent_amount" value="{{ t.rent_amount }}" type="number" step="0.01" class="input">
-              <input name="start_date" value="{{ t.start_date }}" type="date" class="input">
-              <input name="end_date" value="{{ t.end_date }}" type="date" class="input">
-              <input name="consumer_number" value="{{ t.consumer_number }}" class="input">
-              <input name="deposit_amount" value="{{ t.deposit_amount }}" type="number" step="0.01" class="input">
-              <select name="building_id" class="input">
-                {% for b in buildings %}
-                <option value="{{ b.id }}" {% if b.id == t.building_id %}selected{% endif %}>{{ b.name }}</option>
-                {% endfor %}
-              </select>
-              <button class="btn">Update</button>
-            </form>
-          </details>
-          <form method="post" action="{{ url_for('tenants.delete_tenant', tenant_id=t.id) }}" onsubmit="return confirm('Delete tenant?');" class="inline">
-            <button class="btn mt-2">Delete</button>
+{% for t in tenants %}
+<div class="card mb-8" id="tenant-{{ t.id }}">
+  <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <h2 class="text-xl font-semibold">{{ t.name }}</h2>
+      <p class="text-sm text-slate-500">
+        {{ t.building.name }} · Rent: ₹ {{ '%.2f'|format(t.rent_amount or 0) }}
+      </p>
+      <p class="text-sm text-slate-500">
+        Start: {{ t.start_date or '—' }} |
+        End: {{ t.end_date or 'Present' }} |
+        Duration: {{ t.duration_display() }}
+      </p>
+      <p class="text-sm text-slate-500">
+        Consumer #: {{ t.consumer_number or '—' }} |
+        Contacts: {{ t.primary_contact or '—' }}{% if t.secondary_contact %}, {{ t.secondary_contact }}{% endif %}
+      </p>
+      {% if t.agreement_filename %}
+      <p class="text-sm text-teal-600">
+        <a href="{{ url_for('tenants.download_agreement', tenant_id=t.id) }}" class="underline">Download rental agreement</a>
+      </p>
+      {% endif %}
+    </div>
+    <form method="post" action="{{ url_for('tenants.delete_tenant', tenant_id=t.id) }}" onsubmit="return confirm('Delete tenant?');">
+      <button class="btn bg-rose-600 hover:bg-rose-700 text-white">Delete Tenant</button>
+    </form>
+  </div>
+
+  <details class="mt-4">
+    <summary class="cursor-pointer text-teal-600 font-semibold">Edit tenant details</summary>
+    <form method="post" action="{{ url_for('tenants.edit_tenant', tenant_id=t.id) }}" enctype="multipart/form-data" class="mt-3 space-y-3">
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <input name="name" value="{{ t.name }}" class="input" required>
+        <input name="rent_amount" value="{{ t.rent_amount }}" type="number" step="0.01" class="input">
+        <input name="deposit_amount" value="{{ t.deposit_amount }}" type="number" step="0.01" class="input">
+        <select name="building_id" class="input">
+          {% for b in buildings %}
+          <option value="{{ b.id }}" {% if b.id == t.building_id %}selected{% endif %}>{{ b.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <input name="start_date" value="{{ t.start_date }}" type="date" class="input">
+        <input name="end_date" value="{{ t.end_date }}" type="date" class="input">
+        <input name="consumer_number" value="{{ t.consumer_number }}" class="input">
+        <input name="agreement" type="file" accept="application/pdf" class="input">
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <input name="primary_contact" value="{{ t.primary_contact }}" class="input">
+        <input name="secondary_contact" value="{{ t.secondary_contact }}" class="input">
+        {% if t.agreement_filename %}
+        <label class="inline-flex items-center gap-2 text-sm text-slate-600">
+          <input type="checkbox" name="remove_agreement" value="1" class="rounded">
+          Remove current agreement
+        </label>
+        {% endif %}
+      </div>
+      <button class="btn">Update</button>
+    </form>
+  </details>
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+    <section class="space-y-3">
+      <div class="flex items-center justify-between">
+        <h3 class="font-semibold">Recent Changes</h3>
+      </div>
+      <div class="space-y-2">
+        {% for change in t.changes %}
+        <div class="border border-slate-200 rounded p-3 text-sm bg-slate-50">
+          <div class="flex justify-between">
+            <span>{{ change.change_date.strftime('%Y-%m-%d') if change.change_date else 'Date not set' }}</span>
+            <span class="font-semibold">₹ {{ '%.2f'|format(change.amount_spent or 0) }}</span>
+          </div>
+          <p class="mt-1">{{ change.description }}</p>
+          <form method="post" action="{{ url_for('tenants.delete_change', change_id=change.id) }}" class="text-right mt-2">
+            <button class="text-xs text-rose-600 hover:underline">Remove</button>
           </form>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+        </div>
+        {% else %}
+        <p class="text-sm text-slate-500">No changes recorded yet.</p>
+        {% endfor %}
+      </div>
+      <form method="post" action="{{ url_for('tenants.add_change', tenant_id=t.id) }}" class="space-y-2 text-sm">
+        <input name="description" placeholder="Work done / update" class="input" required>
+        <div class="flex gap-2">
+          <input name="amount_spent" type="number" step="0.01" placeholder="Amount" class="input">
+          <input name="change_date" type="date" class="input">
+        </div>
+        <button class="btn w-full">Log change</button>
+      </form>
+    </section>
+
+    <section class="space-y-3">
+      <div class="flex items-center justify-between">
+        <h3 class="font-semibold">Complaints &amp; Concerns</h3>
+      </div>
+      <div class="space-y-2">
+        {% for complaint in t.complaints %}
+        <div class="border border-slate-200 rounded p-3 text-sm {% if complaint.status == 'resolved' %}bg-green-50{% else %}bg-amber-50{% endif %}">
+          <div class="flex justify-between">
+            <span>{{ complaint.created_at.strftime('%Y-%m-%d') }}</span>
+            <span class="uppercase text-xs font-semibold">{{ complaint.status }}</span>
+          </div>
+          <p class="mt-1">{{ complaint.description }}</p>
+          <div class="flex justify-end gap-3 mt-2">
+            {% if complaint.status != 'resolved' %}
+            <form method="post" action="{{ url_for('tenants.resolve_complaint', complaint_id=complaint.id) }}">
+              <button class="text-xs text-teal-700 hover:underline">Mark resolved</button>
+            </form>
+            {% endif %}
+            <form method="post" action="{{ url_for('tenants.delete_complaint', complaint_id=complaint.id) }}">
+              <button class="text-xs text-rose-600 hover:underline">Delete</button>
+            </form>
+          </div>
+        </div>
+        {% else %}
+        <p class="text-sm text-slate-500">No complaints on record.</p>
+        {% endfor %}
+      </div>
+      <form method="post" action="{{ url_for('tenants.add_complaint', tenant_id=t.id) }}" class="space-y-2 text-sm">
+        <textarea name="description" rows="3" class="input" placeholder="Describe the issue" required></textarea>
+        <button class="btn w-full">Add complaint</button>
+      </form>
+    </section>
+
+    <section class="space-y-3">
+      <div class="flex items-center justify-between">
+        <h3 class="font-semibold">To-do List</h3>
+      </div>
+      <div class="space-y-2">
+        {% for todo in t.todos %}
+        <div class="border border-slate-200 rounded p-3 text-sm {% if todo.is_done %}bg-emerald-50{% else %}bg-white{% endif %}">
+          <div class="flex justify-between items-center">
+            <p class="{% if todo.is_done %}line-through text-slate-500{% endif %}">
+              {{ todo.task }}
+            </p>
+            <span class="text-xs text-slate-500">
+              {% if todo.due_date %}Due {{ todo.due_date }}{% endif %}
+            </span>
+          </div>
+          <div class="flex justify-end gap-3 mt-2">
+            <form method="post" action="{{ url_for('tenants.toggle_todo', todo_id=todo.id) }}">
+              <button class="text-xs text-teal-700 hover:underline">
+                {% if todo.is_done %}Mark pending{% else %}Mark done{% endif %}
+              </button>
+            </form>
+            <form method="post" action="{{ url_for('tenants.delete_todo', todo_id=todo.id) }}">
+              <button class="text-xs text-rose-600 hover:underline">Delete</button>
+            </form>
+          </div>
+        </div>
+        {% else %}
+        <p class="text-sm text-slate-500">No outstanding tasks.</p>
+        {% endfor %}
+      </div>
+      <form method="post" action="{{ url_for('tenants.add_todo', tenant_id=t.id) }}" class="space-y-2 text-sm">
+        <input name="task" placeholder="Task description" class="input" required>
+        <input name="due_date" type="date" class="input">
+        <button class="btn w-full">Add task</button>
+      </form>
+    </section>
+  </div>
 </div>
+{% endfor %}
 {% endblock %}
