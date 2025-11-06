@@ -9,7 +9,11 @@ class Config:
     OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 
     # PDF defaults (if your monthly PDFs share a password)
-    PDF_DEFAULT_PASSWORD = os.environ.get("PDF_DEFAULT_PASSWORD", "53979779")
+    PDF_DEFAULT_PASSWORD = (
+        os.environ.get("HDFC_PDF_PASSWORD")
+        or os.environ.get("PDF_DEFAULT_PASSWORD")
+        or "53979779"
+    )
 
 class DevConfig(Config):
     DEBUG = True
