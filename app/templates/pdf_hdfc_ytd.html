@@ -1,0 +1,92 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">HDFC Statement YTD</h1>
+<div class="card mb-4">
+  <form method="post" enctype="multipart/form-data" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+    <div class="md:col-span-2">
+      <label class="text-sm text-slate-500">PDF File</label>
+      <input type="file" name="file" accept="application/pdf" class="input" required>
+    </div>
+    <div>
+      <label class="text-sm text-slate-500">Password (optional)</label>
+      <input type="password" name="password" class="input" placeholder="Defaults to stored passcode">
+    </div>
+    <div class="md:col-span-2 flex items-end">
+      <button type="submit" class="btn">Upload &amp; Parse</button>
+    </div>
+  </form>
+</div>
+
+{% if rows %}
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+  <div class="p-4 rounded bg-teal-50 dark:bg-slate-700/50">
+    <div class="text-sm text-slate-500">Total Deposits</div>
+    <div class="text-3xl font-bold">₹ {{ totals.income_total|fmt_money }}</div>
+  </div>
+  <div class="p-4 rounded bg-rose-50 dark:bg-slate-700/50">
+    <div class="text-sm text-slate-500">Total Withdrawals</div>
+    <div class="text-3xl font-bold">₹ {{ totals.expense_total|fmt_money }}</div>
+  </div>
+  <div class="p-4 rounded bg-emerald-50 dark:bg-slate-700/50">
+    <div class="text-sm text-slate-500">Net</div>
+    <div class="text-3xl font-bold">₹ {{ totals.net|fmt_money }}</div>
+  </div>
+</div>
+
+{% if ytd_totals %}
+<div class="card mb-4">
+  <h2 class="text-lg font-semibold mb-3">Year-to-Date totals</h2>
+  <div class="overflow-auto">
+    <table class="table">
+      <thead>
+        <tr>
+          <th class="th">Year</th>
+          <th class="th text-right">Deposits</th>
+          <th class="th text-right">Withdrawals</th>
+          <th class="th text-right">Net</th>
+          <th class="th text-right">Deposit Entries</th>
+          <th class="th text-right">Withdrawal Entries</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in ytd_totals %}
+        <tr>
+          <td class="td">{{ item.year }}</td>
+          <td class="td text-right">₹ {{ item.income_total|fmt_money }}</td>
+          <td class="td text-right">₹ {{ item.expense_total|fmt_money }}</td>
+          <td class="td text-right">₹ {{ item.net|fmt_money }}</td>
+          <td class="td text-right">{{ item.income_entries }}</td>
+          <td class="td text-right">{{ item.expense_entries }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<div class="card overflow-auto">
+  <div class="text-sm text-slate-500 mb-2">Transactions ({{ rows|length }})</div>
+  <table class="table">
+    <thead>
+      <tr>
+        <th class="th">Date</th>
+        <th class="th">Narration</th>
+        <th class="th text-right">Withdrawal</th>
+        <th class="th text-right">Deposit</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td class="td whitespace-nowrap">{{ r.date }}</td>
+        <td class="td">{{ r.narration }}</td>
+        <td class="td text-right">{% if r.withdrawal %}₹ {{ r.withdrawal|fmt_money }}{% else %}-{% endif %}</td>
+        <td class="td text-right">{% if r.deposit %}₹ {{ r.deposit|fmt_money }}{% else %}-{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

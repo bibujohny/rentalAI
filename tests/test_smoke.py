@@ -63,3 +63,11 @@ def test_ai_insights_local_fallback(client):
     # On dashboard, we should see AI section either way
     assert r.status_code == 200
     assert b"AI Insights" in r.data
+
+
+def test_hdfc_ytd_requires_login_and_renders(client):
+    client.post("/register", data={"username": "u4", "password": "p4"}, follow_redirects=True)
+    client.post("/login", data={"username": "u4", "password": "p4"}, follow_redirects=True)
+    r = client.get("/pdf/hdfc-ytd")
+    assert r.status_code == 200
+    assert b"HDFC Statement YTD" in r.data

@@ -5,6 +5,7 @@ from datetime import date, datetime
 from werkzeug.utils import secure_filename
 from ..utils.pdf_summary import extract_text_from_pdf, summarize_month
 from ..utils.axis_bank import parse_axis_pdf
+from ..utils.hdfc_ytd import parse_hdfc_ytd, compute_ytd_totals
 from ..models_monthly import MonthlySummary
 from ..models import db
 
@@ -393,3 +394,65 @@ def axis_to_json():
 
     return render_template('pdf_axis.html', json_rows=json_rows, totals=totals, years=years, cur_year=cur_year, cur_month=cur_month, saved_files=saved_files, saved_all=saved_all, loaded_file=loaded_file, view_year=view_year, view_month=view_month)
 
+
+@pdf_bp.route('/hdfc-ytd', methods=['GET', 'POST'])
+@login_required
+def hdfc_ytd():
+    rows = None
+    totals = None
+    ytd_totals = None
+
+    if request.method == 'POST':
+        f = request.files.get('file')
+        password = request.form.get('password') or (current_app.config.get('PDF_DEFAULT_PASSWORD') or None)
+        if not f or f.filename == '':
+            flash('Please choose a PDF file.', 'warning')
+            return render_template('pdf_hdfc_ytd.html', rows=None, totals=None, ytd_totals=None)
+        if not allowed_file(f.filename):
+            flash('Only PDF files are allowed.', 'warning')
+            return render_template('pdf_hdfc_ytd.html', rows=None, totals=None, ytd_totals=None)
+        f.seek(0, os.SEEK_END)
+        size_mb = f.tell() / (1024 * 1024)
+        f.seek(0)
+        if size_mb > MAX_SIZE_MB:
+            flash(f'File too large: {size_mb:.1f} MB (max {MAX_SIZE_MB} MB).', 'warning')
+            return render_template('pdf_hdfc_ytd.html', rows=None, totals=None, ytd_totals=None)
+        try:
+            updir = upload_dir()
+            unique_name = f"{uuid.uuid4().hex}_{secure_filename(f.filename)}"
+            tmp_path = os.path.join(updir, unique_name)
+            f.save(tmp_path)
+        except Exception as e:
+            current_app.logger.exception("Upload save failed (hdfc ytd)")
+            flash(f'Upload failed: {e}', 'danger')
+            return render_template('pdf_hdfc_ytd.html', rows=None, totals=None, ytd_totals=None)
+
+        try:
+            current_app.logger.info(f"HDFC YTD parse started file={tmp_path}, password_used={bool(password)}")
+            parsed_rows = parse_hdfc_ytd(tmp_path, password=password)
+            current_app.logger.info(f"HDFC YTD parsed {len(parsed_rows)} rows")
+            if not parsed_rows:
+                flash('No transactions found. Ensure this statement has a visible transactions table.', 'warning')
+            else:
+                parsed_rows.sort(key=lambda r: r.get('date') or '')
+                rows = parsed_rows
+                income_total = round(sum(r.get('deposit') or 0.0 for r in rows), 2)
+                expense_total = round(sum(r.get('withdrawal') or 0.0 for r in rows), 2)
+                totals = {
+                    'income_total': income_total,
+                    'expense_total': expense_total,
+                    'net': round(income_total - expense_total, 2),
+                    'count': len(rows),
+                }
+                ytd_totals = compute_ytd_totals(rows)
+        except Exception as e:
+            current_app.logger.exception("HDFC YTD parsing failed")
+            flash(f'Error parsing statement: {e}', 'danger')
+        finally:
+            try:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+            except Exception:
+                pass
+
+    return render_template('pdf_hdfc_ytd.html', rows=rows, totals=totals, ytd_totals=ytd_totals)
