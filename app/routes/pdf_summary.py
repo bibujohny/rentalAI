@@ -5,6 +5,7 @@ from datetime import date, datetime
 from werkzeug.utils import secure_filename
 from ..utils.pdf_summary import extract_text_from_pdf, summarize_month
 from ..utils.axis_bank import parse_axis_pdf
+from ..utils.hdfc_bank import parse_hdfc_pdf
 from ..models_monthly import MonthlySummary
 from ..models import db
 
@@ -389,3 +390,297 @@ def axis_to_json():
         saved_all = None
 
     return render_template('pdf_axis.html', json_rows=json_rows, totals=totals, years=years, cur_year=cur_year, cur_month=cur_month, saved_files=saved_files, saved_all=saved_all, loaded_file=loaded_file, view_year=view_year, view_month=view_month)
+
+
+@pdf_bp.route('/hdfc', methods=['GET', 'POST'])
+@login_required
+def hdfc_to_json():
+    """Upload an HDFC Bank statement PDF and return structured transaction data."""
+    json_rows = None
+    totals = None
+    cur_year = date.today().year
+    cur_month = date.today().month
+    years = list(range(2022, 2036))
+    saved_files = None
+    saved_all = None
+    loaded_file = None
+
+    def saved_data_dir(y: int, m: int) -> str:
+        base = upload_dir()
+        path = os.path.join(base, 'hdfc_data', str(y), f"{y}-{m:02d}")
+        os.makedirs(path, exist_ok=True)
+        return path
+
+    view_year = request.args.get('view_year', type=int)
+    view_month = request.args.get('view_month', type=int)
+    view_file = request.args.get('view_file')
+    if request.method == 'GET' and view_year and view_month:
+        try:
+            sdir = saved_data_dir(view_year, view_month)
+            files = [
+                os.path.join(sdir, f)
+                for f in os.listdir(sdir)
+                if f.endswith('.json')
+            ]
+            files_meta = []
+            for p in files:
+                try:
+                    st = os.stat(p)
+                    files_meta.append(
+                        {
+                            'name': os.path.basename(p),
+                            'mtime': datetime.fromtimestamp(st.st_mtime).strftime(
+                                '%Y-%m-%d %H:%M'
+                            ),
+                            'size_kb': round(st.st_size / 1024, 1),
+                            'path': p,
+                        }
+                    )
+                except Exception:
+                    continue
+            files_meta.sort(
+                key=lambda x: os.path.getmtime(os.path.join(sdir, x['name'])),
+                reverse=True,
+            )
+            saved_files = files_meta
+            if files_meta:
+                chosen = None
+                if view_file and any(f['name'] == view_file for f in files_meta):
+                    chosen = os.path.join(sdir, view_file)
+                else:
+                    chosen = os.path.join(sdir, files_meta[0]['name'])
+                loaded_file = os.path.basename(chosen)
+                with open(chosen, 'r', encoding='utf-8') as fh:
+                    data = json.load(fh)
+                rows = data.get('rows') or []
+                json_rows = rows
+                income_total = round(sum((r.get('credit') or 0.0) for r in rows), 2)
+                expense_total = round(sum((r.get('debit') or 0.0) for r in rows), 2)
+                office_income_total = round(
+                    sum((r.get('credit') or 0.0) for r in rows if r.get('income_type') == 'office'),
+                    2,
+                )
+                lodge_income_total = round(
+                    sum((r.get('credit') or 0.0) for r in rows if r.get('income_type') == 'lodge'),
+                    2,
+                )
+                totals = {
+                    'income_total': income_total,
+                    'expense_total': expense_total,
+                    'net': round(income_total - expense_total, 2),
+                    'count': len(rows),
+                    'office_income_total': office_income_total,
+                    'lodge_income_total': lodge_income_total,
+                }
+                flash(f"Loaded saved data for {view_year}-{view_month:02d}", 'info')
+            else:
+                flash('No saved data found for the selected month.', 'warning')
+        except Exception:
+            current_app.logger.exception('Failed to load saved HDFC data')
+            flash('Failed to load saved data.', 'danger')
+
+    if request.method == 'POST':
+        f = request.files.get('file')
+        password = request.form.get('password') or (
+            current_app.config.get('PDF_DEFAULT_PASSWORD') or None
+        )
+        save_json = True if request.form.get('save_json') else False
+        save_year = request.form.get('save_year', type=int) or cur_year
+        save_month = request.form.get('save_month', type=int) or cur_month
+
+        if not f or f.filename == '':
+            flash('Please choose a PDF file.', 'warning')
+            return render_template(
+                'pdf_hdfc.html',
+                json_rows=json_rows,
+                totals=totals,
+                years=years,
+                cur_year=cur_year,
+                cur_month=cur_month,
+            )
+        if not allowed_file(f.filename):
+            flash('Only PDF files are allowed.', 'warning')
+            return render_template(
+                'pdf_hdfc.html',
+                json_rows=json_rows,
+                totals=totals,
+                years=years,
+                cur_year=cur_year,
+                cur_month=cur_month,
+            )
+        f.seek(0, os.SEEK_END)
+        size_mb = f.tell() / (1024 * 1024)
+        f.seek(0)
+        if size_mb > MAX_SIZE_MB:
+            flash(
+                f'File too large: {size_mb:.1f} MB (max {MAX_SIZE_MB} MB).',
+                'warning',
+            )
+            return render_template(
+                'pdf_hdfc.html',
+                json_rows=json_rows,
+                totals=totals,
+                years=years,
+                cur_year=cur_year,
+                cur_month=cur_month,
+            )
+        try:
+            updir = upload_dir()
+            unique_name = f"{uuid.uuid4().hex}_{secure_filename(f.filename)}"
+            tmp_path = os.path.join(updir, unique_name)
+            f.save(tmp_path)
+        except Exception as e:
+            current_app.logger.exception("Upload save failed (hdfc)")
+            flash(f'Upload failed: {e}', 'danger')
+            return render_template(
+                'pdf_hdfc.html',
+                json_rows=json_rows,
+                totals=totals,
+                years=years,
+                cur_year=cur_year,
+                cur_month=cur_month,
+            )
+        try:
+            current_app.logger.info(
+                f"HDFC parse started file={tmp_path}, password_used={bool(password)}"
+            )
+            rows = parse_hdfc_pdf(tmp_path, password=password)
+            current_app.logger.info(f"HDFC parsed {len(rows)} rows before filtering")
+            filtered = []
+            for r in rows:
+                part = (r.get('particulars') or '').strip().lower()
+                if not part:
+                    continue
+                if part.startswith('closing balance') or part.startswith('opening balance'):
+                    continue
+                if r.get('debit') is not None and r.get('credit') is not None:
+                    continue
+                filtered.append(r)
+            rows = filtered
+            current_app.logger.info(f"HDFC kept {len(rows)} rows after filtering")
+
+            office_keywords = [
+                'hi tech med gas solutions',
+                'meerathan',
+                'brilliant',
+                'rinuraju',
+            ]
+            office_income_total = 0.0
+            lodge_income_total = 0.0
+            for r in rows:
+                r['income_type'] = None
+                credit = r.get('credit') or 0.0
+                if credit:
+                    part = (r.get('particulars') or '').lower()
+                    if any(k in part for k in office_keywords):
+                        r['income_type'] = 'office'
+                        office_income_total += credit
+                    else:
+                        r['income_type'] = 'lodge'
+                        lodge_income_total += credit
+
+            json_rows = rows
+            if rows:
+                income_total = round(sum((r.get('credit') or 0.0) for r in rows), 2)
+                expense_total = round(sum((r.get('debit') or 0.0) for r in rows), 2)
+                totals = {
+                    'income_total': income_total,
+                    'expense_total': expense_total,
+                    'net': round(income_total - expense_total, 2),
+                    'count': len(rows),
+                    'office_income_total': round(office_income_total, 2),
+                    'lodge_income_total': round(lodge_income_total, 2),
+                }
+                if save_json and (save_year in years) and (1 <= save_month <= 12):
+                    try:
+                        sdir = saved_data_dir(save_year, save_month)
+                        fname = f"hdfc_{save_year}-{save_month:02d}_{uuid.uuid4().hex[:6]}.json"
+                        fpath = os.path.join(sdir, fname)
+                        with open(fpath, 'w', encoding='utf-8') as fh:
+                            json.dump(
+                                {
+                                    'rows': rows,
+                                    'totals': totals,
+                                    'year': save_year,
+                                    'month': save_month,
+                                },
+                                fh,
+                                ensure_ascii=False,
+                            )
+                        flash(f'Saved parsed data as {fname}', 'success')
+                    except Exception:
+                        current_app.logger.exception('Failed to save HDFC parsed JSON')
+                        flash('Failed to save parsed data.', 'danger')
+            else:
+                flash(
+                    'No transactions found. Ensure this is an HDFC Bank statement with visible tables.',
+                    'warning',
+                )
+        except Exception as e:
+            current_app.logger.exception("HDFC PDF parsing failed")
+            flash(f'Error parsing HDFC statement: {e}', 'danger')
+        finally:
+            try:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+            except Exception:
+                pass
+
+    if request.args.get('format') == 'json':
+        return jsonify(json_rows or [])
+
+    try:
+        base = os.path.join(upload_dir(), 'hdfc_data')
+        if os.path.isdir(base):
+            all_items = []
+            for yname in sorted(os.listdir(base), reverse=True):
+                ypath = os.path.join(base, yname)
+                if not os.path.isdir(ypath):
+                    continue
+                for mname in sorted(os.listdir(ypath), reverse=True):
+                    mpath = os.path.join(ypath, mname)
+                    if not os.path.isdir(mpath):
+                        continue
+                    try:
+                        yy, mm = (int(mname.split('-')[0]), int(mname.split('-')[1]))
+                    except Exception:
+                        continue
+                    for fname in sorted(os.listdir(mpath)):
+                        if not fname.endswith('.json'):
+                            continue
+                        fpath = os.path.join(mpath, fname)
+                        try:
+                            st = os.stat(fpath)
+                            all_items.append(
+                                {
+                                    'year': yy,
+                                    'month': mm,
+                                    'name': fname,
+                                    'mtime': datetime.fromtimestamp(st.st_mtime).strftime(
+                                        '%Y-%m-%d %H:%M'
+                                    ),
+                                    'size_kb': round(st.st_size / 1024, 1),
+                                }
+                            )
+                        except Exception:
+                            continue
+            saved_all = sorted(
+                all_items, key=lambda x: (x['year'], x['month'], x['mtime']), reverse=True
+            )
+    except Exception:
+        current_app.logger.exception('Failed to list all saved HDFC JSONs')
+        saved_all = None
+
+    return render_template(
+        'pdf_hdfc.html',
+        json_rows=json_rows,
+        totals=totals,
+        years=years,
+        cur_year=cur_year,
+        cur_month=cur_month,
+        saved_files=saved_files,
+        saved_all=saved_all,
+        loaded_file=loaded_file,
+        view_year=view_year,
+        view_month=view_month,
+    )
