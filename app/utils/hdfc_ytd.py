@@ -2,6 +2,7 @@ from __future__ import annotations
 import logging
 from typing import List, Dict, Optional
 from dateutil import parser as dateparser
+import re
 
 try:
     import pdfplumber
@@ -11,6 +12,15 @@ except Exception:  # pragma: no cover
 logger = logging.getLogger(__name__)
 
 SUMMARY_KEYWORDS = ("closing balance", "opening balance", "total")
+SUMMARY_LINE_KEYWORDS = (
+    "closingbalanceincludes",
+    "contentsofthisstatement",
+    "hdfcbanklimited",
+    "stateaccountbranch",
+    "registeredofficeaddress",
+    "thisstatement",
+    "hdfcbankgstinnumber",
+)
 
 
 def _parse_float(value: Optional[str]) -> float:
@@ -66,74 +76,64 @@ def parse_hdfc_ytd(path: str, password: Optional[str] = None) -> List[Dict]:
     try:
         logger.debug("Opening HDFC PDF path=%s", path)
         with pdfplumber.open(path, password=password) as pdf:
+            current_entry = None
             for page_number, page in enumerate(pdf.pages):
-                tables = page.extract_tables(table_settings=table_settings) or []
-                logger.debug("Page %s extracted %s tables", page_number, len(tables))
-                for tbl in tables:
-                    if not tbl or len(tbl[0]) < 6:
-                        logger.debug("Skipping table with insufficient columns on page %s", page_number)
+                text = page.extract_text() or ""
+                logger.debug("Page %s extracted text length=%s", page_number, len(text))
+                for raw_line in text.splitlines():
+                    line = raw_line.strip()
+                    if not line:
                         continue
-                    data_rows = tbl[1:] if "date" in (str(tbl[0][0]).lower()) else tbl
-                    logger.debug("Processing table on page %s with %s data rows", page_number, len(data_rows))
-                    pending_deposits: List[float] = []
-                    for raw in data_rows:
-                        padded = list(raw) + [""] * (6 - len(raw))
-                        date_vals = str(padded[0] or "").splitlines()
-                        narration_vals = str(padded[1] or "").splitlines()
-                        withdrawal_vals = str(padded[4] or "").splitlines()
-                        deposit_vals_raw = str(padded[5] or "").splitlines()
+                    m = re.match(r'^(\d{2}/\d{2}/\d{2})\s+(.*)$', line)
+                    if m:
+                        if current_entry:
+                            rows.append(current_entry)
+                        date_str_iso = _parse_date(m.group(1), last_date)
+                        last_date = date_str_iso or last_date
+                        rest = m.group(2).strip()
 
-                        max_len = max(
-                            len(date_vals) or 1,
-                            len(narration_vals) or 1,
-                            len(withdrawal_vals) or 0,
-                            len(deposit_vals_raw) or 0,
-                        )
+                        closing_match = re.search(r'(\d{1,3}(?:,\d{3})*(?:\.\d{2}))\s*$', rest)
+                        if closing_match:
+                            rest = rest[:closing_match.start()].rstrip()
 
-                        deposit_vals = [''] * max_len
-                        start = max_len - len(deposit_vals_raw)
-                        if start < 0:
-                            start = 0
-                        for offset, val in enumerate(deposit_vals_raw[-max_len:]):
-                            deposit_vals[start + offset] = val
+                        narration_part = rest
+                        ref_match = re.search(r'\s\d{6,}\b', rest)
+                        tail = ''
+                        if ref_match:
+                            narration_part = rest[:ref_match.start()].strip()
+                            tail = rest[ref_match.end():].strip()
+                        else:
+                            tail = ''
 
-                        for idx in range(max_len):
-                            date_cell = date_vals[idx] if idx < len(date_vals) else ""
-                            narration_cell = narration_vals[idx] if idx < len(narration_vals) else ""
-                            withdrawal_cell = withdrawal_vals[idx] if idx < len(withdrawal_vals) else ""
-                            deposit_cell = deposit_vals[idx]
+                        value_match = re.search(r'\b\d{2}/\d{2}/\d{2}\b', tail)
+                        if value_match:
+                            tail = tail[value_match.end():].strip()
 
-                            narration_raw_lines = [line.strip() for line in str(narration_cell).splitlines() if line.strip()]
-                            narration = " ".join(narration_raw_lines)
-                            if not narration:
-                                continue
-                            low = narration.lower()
-                            if any(tok in low for tok in SUMMARY_KEYWORDS):
-                                logger.debug("Skipping summary row narration=%s", narration)
-                                continue
+                        amounts = [match.group() for match in re.finditer(r'\d{1,3}(?:,\d{3})*(?:\.\d{2})', tail)]
+                        withdrawal_amt = deposit_amt = 0.0
+                        if len(amounts) == 1:
+                            withdrawal_amt = _parse_float(amounts[0])
+                        elif len(amounts) >= 2:
+                            withdrawal_amt = _parse_float(amounts[-2])
+                            deposit_amt = _parse_float(amounts[-1])
 
-                            current_date = _parse_date(date_cell, last_date)
-                            if not current_date:
-                                logger.debug("Unable to parse date date_cell=%s last_date=%s", date_cell, last_date)
-                                continue
-                            last_date = current_date
-
-                            withdrawal_amt = round(_parse_float(withdrawal_cell), 2)
-                            deposit_amt = round(_parse_float(deposit_cell), 2)
-                            if deposit_amt and withdrawal_amt:
-                                pending_deposits.append(deposit_amt)
-                                deposit_amt = 0.0
-                            if not deposit_amt and pending_deposits and withdrawal_amt == 0.0:
-                                deposit_amt = pending_deposits.pop(0)
-
-                            rows.append(
-                                {
-                                    "date": current_date,
-                                    "narration": narration,
-                                    "withdrawal": withdrawal_amt,
-                                    "deposit": deposit_amt,
-                                }
-                            )
+                        narration = " ".join(narration_part.split())
+                        current_entry = {
+                            "date": date_str_iso,
+                            "narration": narration,
+                            "withdrawal": round(withdrawal_amt, 2),
+                            "deposit": round(deposit_amt, 2),
+                        }
+                    else:
+                        lower_line = line.lower()
+                        if any(kw in lower_line for kw in SUMMARY_LINE_KEYWORDS):
+                            continue
+                        if current_entry:
+                            current_entry["narration"] = (
+                                current_entry["narration"] + " " + line
+                            ).strip()
+            if current_entry:
+                rows.append(current_entry)
     except Exception as exc:
         logger.exception("Failed to parse HDFC PDF path=%s error=%s", path, exc)
         return rows
