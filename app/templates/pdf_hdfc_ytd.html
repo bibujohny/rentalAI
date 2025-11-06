@@ -172,13 +172,22 @@
     <tbody>
       {% for r in highlight_rows %}
       <tr class="bg-amber-50/70 dark:bg-amber-900/40">
-        <td class="td whitespace-nowrap">{{ r.date }}</td>
+        <td class="td whitespace-nowrap">{{ r.display_date or r.date }}</td>
         <td class="td">{{ r.narration }}</td>
         <td class="td text-right">{% if r.withdrawal %}₹ {{ r.withdrawal|fmt_money }}{% else %}-{% endif %}</td>
         <td class="td text-right">{% if r.deposit %}₹ {{ r.deposit|fmt_money }}{% else %}-{% endif %}</td>
       </tr>
       {% endfor %}
     </tbody>
+    {% if highlight_summary %}
+    <tfoot>
+      <tr class="bg-amber-100/60 dark:bg-amber-900/50 font-semibold">
+        <th class="th text-right" colspan="2">Subtotal</th>
+        <th class="th text-right">₹ {{ highlight_summary.withdrawal_total|fmt_money }}</th>
+        <th class="th text-right">₹ {{ highlight_summary.deposit_total|fmt_money }}</th>
+      </tr>
+    </tfoot>
+    {% endif %}
   </table>
 </div>
 {% endif %}
@@ -199,7 +208,7 @@
       {% for r in rows %}
       {% set is_highlight = highlight_indices and (loop.index0 in highlight_indices) %}
       <tr class="{% if is_highlight %}bg-amber-50 dark:bg-amber-900/30{% endif %}">
-        <td class="td whitespace-nowrap">{{ r.date }}</td>
+        <td class="td whitespace-nowrap">{{ r.display_date or r.date }}</td>
         <td class="td">
           {{ r.narration }}
           {% if is_highlight %}

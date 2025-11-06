@@ -34,6 +34,22 @@ def hdfc_saved_base() -> str:
     return base
 
 
+def format_display_date(value: str | None) -> str | None:
+    if not value:
+        return value
+    try:
+        return datetime.strptime(value, '%Y-%m-%d').strftime('%d/%m/%Y')
+    except ValueError:
+        return value
+
+
+def attach_display_dates(entries: list[dict] | None) -> None:
+    if not entries:
+        return
+    for item in entries:
+        if isinstance(item, dict):
+            item['display_date'] = format_display_date(item.get('date'))
+
 
 @pdf_bp.route('/summary', methods=['GET', 'POST'])
 @login_required
@@ -473,6 +489,7 @@ def hdfc_ytd():
                         data = json.load(fh)
                     rows = data.get('rows') or []
                     rows.sort(key=lambda r: r.get('date') or '')
+                    attach_display_dates(rows)
                     income_total = round(sum(r.get('deposit') or 0.0 for r in rows), 2)
                     expense_total = round(sum(r.get('withdrawal') or 0.0 for r in rows), 2)
                     totals = {
@@ -556,6 +573,7 @@ def hdfc_ytd():
             else:
                 parsed_rows.sort(key=lambda r: r.get('date') or '')
                 rows = parsed_rows
+                attach_display_dates(rows)
                 income_total = round(sum(r.get('deposit') or 0.0 for r in rows), 2)
                 expense_total = round(sum(r.get('withdrawal') or 0.0 for r in rows), 2)
                 totals = {
@@ -577,8 +595,13 @@ def hdfc_ytd():
                             continue
                         fname = f"hdfc_{year}_{timestamp}_{uuid.uuid4().hex[:6]}.json"
                         fpath = os.path.join(year_dir, fname)
+                        subset_clean = []
+                        for item in subset:
+                            clean = dict(item)
+                            clean.pop('display_date', None)
+                            subset_clean.append(clean)
                         with open(fpath, 'w', encoding='utf-8') as fh:
-                            json.dump({'year': year, 'rows': subset}, fh, ensure_ascii=False)
+                            json.dump({'year': year, 'rows': subset_clean}, fh, ensure_ascii=False)
                         current_app.logger.info(
                             "Saved HDFC YTD snapshot year=%s rows=%s file=%s",
                             year,
@@ -605,7 +628,9 @@ def hdfc_ytd():
             if low in narration:
                 highlight_indices.add(idx)
         if highlight_indices:
-            focus_rows = [rows[i] for i in sorted(highlight_indices)]
+            sorted_idx = sorted(highlight_indices)
+            focus_rows = [rows[i] for i in sorted_idx]
+            focus_rows = sorted(focus_rows, key=lambda r: r.get('date') or '')
             withdrawal_total = round(sum(r.get('withdrawal') or 0.0 for r in focus_rows), 2)
             deposit_total = round(sum(r.get('deposit') or 0.0 for r in focus_rows), 2)
             highlight_rows = focus_rows
