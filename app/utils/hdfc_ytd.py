@@ -47,6 +47,28 @@ SUMMARY_LINE_KEYWORDS = (
     "ernakulam",
 )
 
+HEADER_TAIL_PATTERNS = [
+    r"account\s*branch",
+    r"statement\s*of\s*account",
+    r"statementfrom",
+    r"statement\s*from",
+    r"address\s*:?",
+    r"city\s*:?",
+    r"state\s*:?",
+    r"phoneno",
+    r"phone\s*no",
+    r"email\s*:?",
+    r"cust\s*id",
+    r"account\s*no",
+    r"a/?c\s*open\s*date",
+    r"account\s*status",
+    r"branch\s*code",
+    r"account\s*type",
+    r"nomination",
+    r"tower\s*2\s*id",
+    r"link\s*rd",
+]
+
 
 def _parse_float(value: Optional[str]) -> float:
     if not value:
@@ -127,6 +149,11 @@ def parse_hdfc_ytd(path: str, password: Optional[str] = None) -> List[Dict]:
 
                         rest = re.sub(r'\s\d{6,}\b', ' ', rest)
                         rest = re.sub(r'\b\d{2}/\d{2}/\d{2}\b', ' ', rest, count=1)
+                        for pattern in HEADER_TAIL_PATTERNS:
+                            header_match = re.search(pattern, rest, flags=re.IGNORECASE)
+                            if header_match:
+                                rest = rest[:header_match.start()].rstrip()
+                                break
 
                         numbers = re.findall(r'\d{1,3}(?:,\d{3})*(?:\.\d{2})', rest)
                         withdrawal_amt = deposit_amt = 0.0
