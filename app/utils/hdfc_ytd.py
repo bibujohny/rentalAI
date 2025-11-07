@@ -70,6 +70,16 @@ HEADER_TAIL_PATTERNS = [
 ]
 
 
+def _trim_header_tail(text: str) -> str:
+    if not text:
+        return text
+    for pattern in HEADER_TAIL_PATTERNS:
+        header_match = re.search(pattern, text, flags=re.IGNORECASE)
+        if header_match:
+            return text[: header_match.start()].rstrip()
+    return text
+
+
 def _parse_float(value: Optional[str]) -> float:
     if not value:
         return 0.0
@@ -149,11 +159,7 @@ def parse_hdfc_ytd(path: str, password: Optional[str] = None) -> List[Dict]:
 
                         rest = re.sub(r'\s\d{6,}\b', ' ', rest)
                         rest = re.sub(r'\b\d{2}/\d{2}/\d{2}\b', ' ', rest, count=1)
-                        for pattern in HEADER_TAIL_PATTERNS:
-                            header_match = re.search(pattern, rest, flags=re.IGNORECASE)
-                            if header_match:
-                                rest = rest[:header_match.start()].rstrip()
-                                break
+                        rest = _trim_header_tail(rest)
 
                         numbers = re.findall(r'\d{1,3}(?:,\d{3})*(?:\.\d{2})', rest)
                         withdrawal_amt = deposit_amt = 0.0
@@ -164,7 +170,7 @@ def parse_hdfc_ytd(path: str, password: Optional[str] = None) -> List[Dict]:
                             deposit_amt = _parse_float(numbers[-1])
 
                         narration = re.sub(r'\d{1,3}(?:,\d{3})*(?:\.\d{2})', ' ', rest)
-                        narration = " ".join(narration.split())
+                        narration = _trim_header_tail(" ".join(narration.split()))
 
                         current_entry = {
                             "date": date_str_iso,
@@ -177,9 +183,9 @@ def parse_hdfc_ytd(path: str, password: Optional[str] = None) -> List[Dict]:
                         if any(kw in lower_line for kw in SUMMARY_LINE_KEYWORDS):
                             continue
                         if current_entry:
-                            current_entry["narration"] = (
-                                current_entry["narration"] + " " + line
-                            ).strip()
+                            merged = f"{current_entry['narration']} {line}".strip()
+                            merged = " ".join(merged.split())
+                            current_entry["narration"] = _trim_header_tail(merged)
             if current_entry:
                 rows.append(current_entry)
     except Exception as exc:
